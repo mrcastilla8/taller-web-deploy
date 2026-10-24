@@ -93,7 +93,8 @@ $('read-reviews').addEventListener('click', () => action('review-status', async 
 
 await action('profile-status', async () => {
   const [health, state] = await Promise.all([api('/health'), api('/state')])
-  $('connection').textContent = health.storage === 'memory' ? 'Conectado · modo en memoria' : 'Conectado · SQLite persistente'
+  $('connection').textContent = health.storage === 'memory' ? 'Conectado · modo en memoria'
+    : health.storage === 'postgres' ? 'Conectado · PostgreSQL en Azure' : 'Conectado · SQLite persistente'
   for (const select of document.querySelectorAll('.event-select')) {
     select.replaceChildren(...state.events.map((event) => {
       const option = document.createElement('option')

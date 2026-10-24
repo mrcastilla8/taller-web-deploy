@@ -4,3 +4,5 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 *.log
 .env
+deploy/out/
+*.parameters.local.json

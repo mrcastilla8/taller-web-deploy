@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
@@ -13,6 +15,8 @@
   },
   "dependencies": {
     "express": "^5.1.0",
+    "pg": "^8.23.1",
+    "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.7",
     "sqlite3": "^6.0.1"
   }

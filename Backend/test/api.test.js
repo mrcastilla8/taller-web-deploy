@@ -22,6 +22,9 @@ async function fixture(t) {
 
 test('catálogo, categorías, agenda y detalle conservan el contrato del frontend', async (t) => {
   const { call } = await fixture(t)
+  const readiness = await call('/ready')
+  assert.equal(readiness.status, 200)
+  assert.equal(readiness.data.database, 'sqlite')
   const { data: events } = await call('/events')
   assert.equal(events.length, seed.length)
   assert.deepEqual(events.find((event) => event.id === 1), mockEvents[0])

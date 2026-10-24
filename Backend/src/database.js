@@ -1,16 +1,24 @@
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { DataTypes, Sequelize, Transaction } from 'sequelize'
+import pg from 'pg'
 import { mockEvents } from './data/events.js'
 import { HttpError } from './errors.js'
 
-export async function openDatabase({ storage, seed = mockEvents, logging = false }) {
-  if (storage !== ':memory:') await mkdir(dirname(storage), { recursive: true })
-  const sequelize = new Sequelize({
-    dialect: 'sqlite', storage, logging,
-    retry: { match: [/SQLITE_BUSY/], max: 5 },
-    define: { timestamps: false },
-  })
+export async function openDatabase({ storage, databaseUrl, ssl = true, seed = mockEvents, logging = false }) {
+  const postgres = Boolean(databaseUrl)
+  if (!postgres && storage !== ':memory:') await mkdir(dirname(storage), { recursive: true })
+  const common = { logging, define: { timestamps: false } }
+  const sequelize = postgres
+    ? new Sequelize(databaseUrl, {
+      ...common, dialect: 'postgres', dialectModule: pg,
+      dialectOptions: { ssl: ssl ? { require: true, rejectUnauthorized: true } : false },
+      pool: { min: 0, max: 5, acquire: 30000, idle: 10000 },
+    })
+    : new Sequelize({
+      ...common, dialect: 'sqlite', storage,
+      retry: { match: [/SQLITE_BUSY/], max: 5 },
+    })
   const Event = sequelize.define('Event', {
     id: { type: DataTypes.INTEGER, primaryKey: true },
     title: { type: DataTypes.STRING, allowNull: false },
@@ -53,8 +61,10 @@ export async function openDatabase({ storage, seed = mockEvents, logging = false
 
   try {
     await sequelize.authenticate()
-    await sequelize.query('PRAGMA foreign_keys = ON')
-    if (storage !== ':memory:') await sequelize.query('PRAGMA journal_mode = WAL')
+    if (!postgres) {
+      await sequelize.query('PRAGMA foreign_keys = ON')
+      if (storage !== ':memory:') await sequelize.query('PRAGMA journal_mode = WAL')
+    }
     // Crea tablas que no existen. Nunca fuerza, borra ni sobrescribe los datos.
     await sequelize.sync()
     await Event.bulkCreate(seed, { ignoreDuplicates: true })
@@ -67,6 +77,8 @@ export async function openDatabase({ storage, seed = mockEvents, logging = false
   // La transacción mantiene juntas la comprobación de cupos y la inscripción.
   let writes = Promise.resolve()
   const write = (operation) => {
+    // En PostgreSQL el bloqueo de fila protege los cupos entre varias instancias.
+    if (postgres) return sequelize.transaction(operation)
     const result = writes.then(() => sequelize.transaction(
       { type: Transaction.TYPES.IMMEDIATE }, operation,
     ))
@@ -80,7 +92,9 @@ export async function openDatabase({ storage, seed = mockEvents, logging = false
     return student
   }
   const requireEvent = async (eventId, transaction) => {
-    const event = await Event.findByPk(eventId, { transaction })
+    const event = await Event.findByPk(eventId, {
+      transaction, ...(postgres && transaction ? { lock: transaction.LOCK.UPDATE } : {}),
+    })
     if (!event) throw new HttpError(404, 'Evento no encontrado.')
     return event
   }
@@ -89,7 +103,7 @@ export async function openDatabase({ storage, seed = mockEvents, logging = false
       Event.findAll({ order: [['id', 'ASC']], raw: true }),
       Inscription.count({ group: ['eventId'] }),
     ])
-    const enrolled = new Map(counts.map((row) => [row.eventId, row.count]))
+    const enrolled = new Map(counts.map((row) => [row.eventId, Number(row.count)]))
     return events.map((event) => ({
       ...event,
       isFree: Boolean(event.isFree),
@@ -109,7 +123,7 @@ export async function openDatabase({ storage, seed = mockEvents, logging = false
   }
 
   return {
-    sequelize, storage,
+    sequelize, storage, dialect: postgres ? 'postgres' : 'sqlite',
     models: { Event, Student, Inscription, Favorite, Review },
     listEvents, profile,
     async state(sessionId) {
@@ -187,7 +201,7 @@ export async function openDatabase({ storage, seed = mockEvents, logging = false
         'WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < $iterations) SELECT SUM(x) AS total FROM n',
         { bind: { iterations } },
       )
-      return rows[0]
+      return { total: Number(rows[0].total) }
     },
     async close() { await writes; await sequelize.close() },
   }

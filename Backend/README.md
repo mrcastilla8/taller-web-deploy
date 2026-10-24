@@ -1,12 +1,17 @@
 # Backend de EventosFISI
 
-API REST en JavaScript con Node.js, Express, Sequelize y SQLite. Implementa los
+API REST en JavaScript con Node.js, Express y Sequelize, con SQLite local o
+PostgreSQL para Azure. Implementa los
 requisitos de las dos imágenes: APIs de eventos, concurrencia, modo en memoria,
 persistencia con ORM y dos funciones nuevas que graban y consultan datos.
 
 **Alcance acordado: solo `Backend/`.** `Frontend/` conserva exactamente los archivos
 del remoto. El laboratorio es un cliente de prueba servido por este backend;
 la conexión del frontend original a las APIs queda para una etapa posterior.
+
+El despliegue de Azure está preparado en [deploy/README.md](deploy/README.md):
+App Service Linux y Azure Database for PostgreSQL. Requiere una suscripción
+habilitada; compilar la infraestructura localmente no equivale a desplegarla.
 
 ## Ejecutar
 
@@ -55,6 +60,7 @@ reglas de presentación siguen siendo responsabilidad del frontend.
 | Método | Ruta | Resultado |
 |---|---|---|
 | GET | `/health` | Estado, modo y contadores de peticiones pendientes |
+| GET | `/ready` | Comprueba también la conexión a la base de datos |
 | GET | `/categories` | Categorías originales |
 | GET | `/events` | Eventos; `enrolled` ya incluye todas las nuevas inscripciones |
 | GET | `/events/:id` | Detalle de un evento |
@@ -77,10 +83,12 @@ Las validaciones de nombre, correo institucional y teléfono también se aplican
 en el servidor. Las fechas conservan la comparación por día UTC del frontend
 original.
 
-El conteo y la inserción se realizan en una transacción `IMMEDIATE`. Una cola de
-Promises serializa las escrituras de esta instancia, apropiado para SQLite, sin
-bloquear el hilo de JavaScript. Las claves primarias compuestas impiden duplicados
-y las claves foráneas eliminan los registros asociados al borrar el perfil.
+En SQLite, el conteo y la inserción se realizan en una transacción `IMMEDIATE`;
+una cola de Promises serializa las escrituras de esta instancia sin bloquear el
+hilo de JavaScript. En PostgreSQL, las transacciones bloquean la fila del evento
+con `SELECT FOR UPDATE`, protegiendo los cupos entre varias instancias del backend.
+Las claves primarias compuestas impiden duplicados y las claves foráneas eliminan
+los registros asociados al borrar el perfil.
 
 ## Dos funciones nuevas con ORM
 
@@ -136,12 +144,18 @@ prueba de demora también incluye una lectura ORM mientras la espera sigue activ
 `/api/demo/orm` está limitado a cinco millones de iteraciones y `delayMs` a 10 s.
 Son herramientas locales de demostración del taller.
 
+Para PostgreSQL, Sequelize utiliza el controlador asíncrono `pg`. Se mantiene
+la misma API y las operaciones se esperan con `await`. En Azure, la conexión
+usa TLS con validación del certificado. `DATABASE_URL` selecciona PostgreSQL;
+`DB_SSL=disable` se reserva para un PostgreSQL local de pruebas.
+
 Fuentes técnicas verificadas:
 
 - [Sequelize: Promises y async/await](https://sequelize.org/docs/v6/getting-started/#promises-and-asyncawait).
 - [Sequelize: controlador SQLite y almacenamiento en memoria](https://sequelize.org/docs/v6/other-topics/dialect-specific-things/#sqlite).
 - [sqlite3: código que encola el trabajo nativo](https://github.com/TryGhost/node-sqlite3/blob/v6.0.1/src/macros.h).
 - [Node-API: napi_queue_async_work](https://nodejs.org/api/n-api.html#napi_queue_async_work).
+- [node-postgres: consultas asíncronas](https://node-postgres.com/features/queries).
 
 ## Estructura
 
@@ -158,5 +172,6 @@ Backend/
   support/harness.js   Servidores y bases aisladas para las pruebas
   scripts/evidence.js  Generador reproducible de evidencia
   evidence/            Resultados de la ejecución y capturas del laboratorio
+  deploy/              Plantillas Bicep, publicación y guía de Azure
   data/                Archivo SQLite local, excluido de Git
 ```

@@ -46,9 +46,13 @@ export function createApp(db, { log = console.log } = {}) {
   const state = async (req, res) => res.json(await db.state(session(req)))
 
   app.get('/api/health', (req, res) => res.json({
-    status: 'ok', storage: db.storage === ':memory:' ? 'memory' : 'sqlite',
+    status: 'ok', storage: db.dialect === 'postgres' ? 'postgres' : db.storage === ':memory:' ? 'memory' : 'sqlite',
     pendingDelays, pendingQueries,
   }))
+  app.get('/api/ready', async (req, res) => {
+    await db.sequelize.authenticate()
+    res.json({ status: 'ready', database: db.dialect })
+  })
   app.get('/api/categories', (req, res) => res.json(CATEGORIES))
   app.get('/api/events', async (req, res) => {
     const ms = req.query.delayMs === undefined ? 0 : integer(req.query.delayMs, 0, 10000, 'delayMs')
@@ -148,7 +152,7 @@ export function createApp(db, { log = console.log } = {}) {
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error)
     const status = error.status ?? (error.name === 'SequelizeValidationError' ? 400 : 500)
-    if (status >= 500) console.error(error)
+    if (status >= 500) console.error({ name: error.name, message: error.message, code: error.parent?.code })
     res.status(status).json({
       error: status >= 500 ? 'No se pudo completar la operación.'
         : error.type === 'entity.parse.failed' ? 'El cuerpo debe ser JSON válido.'
