@@ -1,0 +1,163 @@
+{
+  "generatedAt": "2026-10-24T16:48:13.810Z",
+  "node": "v24.11.1",
+  "storage": "SQLite en archivo temporal; conexión y servidor cerrados y reabiertos antes de consultar",
+  "simulatedDelay": {
+    "kind": "delay",
+    "passed": true,
+    "observed": {
+      "path": "/api/health",
+      "status": 200,
+      "requestId": "4738e114-f1ad-4fcb-8fae-c8dd1b160dde",
+      "sentMs": 30,
+      "completedMs": 60,
+      "elapsedMs": 30,
+      "data": {
+        "status": "ok",
+        "storage": "sqlite",
+        "pendingDelays": 1,
+        "pendingQueries": 0
+      }
+    },
+    "quick": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "requestId": "317f2b0a-67aa-49bf-a923-c70e22f89c42",
+        "sentMs": 61,
+        "completedMs": 75,
+        "elapsedMs": 14,
+        "data": {
+          "status": "ok",
+          "storage": "sqlite",
+          "pendingDelays": 1,
+          "pendingQueries": 0
+        },
+        "completedWhileWaiting": true
+      },
+      {
+        "path": "/api/categories",
+        "status": 200,
+        "requestId": "3a32e43a-24f0-45cc-b9d4-522a22bf5694",
+        "sentMs": 61,
+        "completedMs": 76,
+        "elapsedMs": 15,
+        "data": {
+          "items": 6
+        },
+        "completedWhileWaiting": true
+      },
+      {
+        "path": "/api/events",
+        "status": 200,
+        "requestId": "8af7f1f9-c3fd-43e6-866a-b7165d4e0ea7",
+        "sentMs": 62,
+        "completedMs": 79,
+        "elapsedMs": 17,
+        "data": {
+          "items": 9
+        },
+        "completedWhileWaiting": true
+      }
+    ],
+    "slow": {
+      "path": "/api/events?delayMs=3000",
+      "status": 200,
+      "requestId": "321ddfcc-7f50-4087-9afb-7611d89138c1",
+      "sentMs": 0,
+      "completedMs": 3048,
+      "elapsedMs": 3048,
+      "data": {
+        "items": 9
+      }
+    }
+  },
+  "realOrmQuery": {
+    "kind": "orm",
+    "passed": true,
+    "observed": {
+      "path": "/api/health",
+      "status": 200,
+      "requestId": "3bd71a9e-8697-4f63-8ca9-28ef5db20f6f",
+      "sentMs": 1,
+      "completedMs": 3,
+      "elapsedMs": 2,
+      "data": {
+        "status": "ok",
+        "storage": "sqlite",
+        "pendingDelays": 0,
+        "pendingQueries": 1
+      }
+    },
+    "quick": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "requestId": "a42ae7f8-6222-43af-856e-d746ba694838",
+        "sentMs": 3,
+        "completedMs": 7,
+        "elapsedMs": 4,
+        "data": {
+          "status": "ok",
+          "storage": "sqlite",
+          "pendingDelays": 0,
+          "pendingQueries": 1
+        },
+        "completedWhileWaiting": true
+      },
+      {
+        "path": "/api/categories",
+        "status": 200,
+        "requestId": "cbbf24f9-663f-4a4b-85f5-827cae4ec3cc",
+        "sentMs": 4,
+        "completedMs": 7,
+        "elapsedMs": 3,
+        "data": {
+          "items": 6
+        },
+        "completedWhileWaiting": true
+      }
+    ],
+    "slow": {
+      "path": "/api/demo/orm?iterations=3000000",
+      "status": 200,
+      "requestId": "f0ca156f-ca55-4fec-a876-03fb67e8a627",
+      "sentMs": 0,
+      "completedMs": 792,
+      "elapsedMs": 792,
+      "data": {
+        "total": 4500001500000,
+        "iterations": 3000000,
+        "timerTicks": 50,
+        "elapsedMs": 789
+      }
+    }
+  },
+  "persistence": {
+    "passed": true,
+    "reopenedDatabase": true,
+    "favorites": {
+      "saveStatus": 200,
+      "readStatus": 200,
+      "eventIds": [
+        7
+      ]
+    },
+    "reviews": {
+      "saveStatus": 200,
+      "readStatus": 200,
+      "eventId": 7,
+      "count": 1,
+      "average": 5,
+      "reviews": [
+        {
+          "author": "Estudiante de Demostración",
+          "rating": 5,
+          "comment": "Valoración guardada con Sequelize y recuperada al reabrir SQLite.",
+          "createdAt": "2026-10-24T16:48:13.762Z",
+          "updatedAt": "2026-10-24T16:48:13.762Z"
+        }
+      ]
+    }
+  }
+}

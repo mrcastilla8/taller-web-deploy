@@ -1,0 +1,19 @@
+{
+  "name": "eventos-fisi-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "start:memory": "node src/server.js --memory",
+    "test": "node --test --test-concurrency=1",
+    "evidence": "node scripts/evidence.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "sequelize": "^6.37.7",
+    "sqlite3": "^6.0.1"
+  }
+}

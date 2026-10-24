@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio · EventosFISI</title>
+  <link rel="stylesheet" href="/laboratorio.css">
+  <script type="module" src="/laboratorio.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">EVENTOSFISI / EVIDENCIA DE IMPLEMENTACIÓN</p>
+      <h1>Un backend que sigue atendiendo.</h1>
+      <p class="intro">Comprueba la concurrencia y guarda datos reales con Node.js, Sequelize y SQLite.</p>
+      <div class="header-line"><span id="connection" role="status">Conectando…</span><a href="/api/health">Ver estado de la API ↗</a></div>
+    </header>
+
+    <section aria-labelledby="concurrency-title">
+      <p class="eyebrow">01 / CONCURRENCIA</p>
+      <h2 id="concurrency-title">Una petición espera. Las demás avanzan.</h2>
+      <p>La primera prueba espera 3 segundos en el backend. La segunda ejecuta una consulta SQL real mediante el ORM. Ambas envían otras peticiones durante la espera.</p>
+      <div class="actions">
+        <button id="run-delay">Probar espera de 3 segundos</button>
+        <button id="run-orm" class="secondary">Probar consulta ORM</button>
+      </div>
+      <p id="concurrency-status" role="status" aria-live="polite">Listo para probar.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Petición</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Resultado</th></tr></thead>
+        <tbody id="timings"><tr><td colspan="5">Aquí aparecerán las mediciones reales.</td></tr></tbody>
+      </table></div>
+      <details><summary>Ver evidencia JSON e identificadores de petición</summary><pre id="concurrency-json">Sin ejecución todavía.</pre></details>
+    </section>
+
+    <section aria-labelledby="profile-title">
+      <p class="eyebrow">02 / IDENTIFICACIÓN</p>
+      <h2 id="profile-title">Un perfil para las dos funciones nuevas.</h2>
+      <p>Este es un cliente de prueba de la API. Al recargar, los datos se vuelven a consultar al servidor.</p>
+      <form id="profile-form">
+        <div class="fields">
+          <label>Nombre completo<input name="name" autocomplete="name" required minlength="3" maxlength="150"></label>
+          <label>Correo institucional<input name="email" type="email" autocomplete="email" placeholder="estudiante@unmsm.edu.pe" required></label>
+          <label>Teléfono<input name="phone" type="tel" autocomplete="tel" placeholder="987654321" required></label>
+        </div>
+        <button>Guardar perfil</button>
+      </form>
+      <p id="profile-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <div class="columns">
+      <section aria-labelledby="favorites-title">
+        <p class="eyebrow">03 / FUNCIÓN NUEVA 1</p>
+        <h2 id="favorites-title">Favoritos</h2>
+        <p>Guarda un evento y consulta tu lista desde la base de datos.</p>
+        <label>Evento<select id="favorite-event" class="event-select" aria-label="Evento favorito"></select></label>
+        <div class="actions">
+          <button id="save-favorite">Guardar favorito</button>
+          <button id="read-favorites" class="secondary">Consultar favoritos</button>
+          <button id="remove-favorite" class="secondary">Quitar favorito</button>
+        </div>
+        <p id="favorite-status" role="status" aria-live="polite"></p>
+        <ul id="favorite-list"></ul>
+      </section>
+      <section aria-labelledby="reviews-title">
+        <p class="eyebrow">04 / FUNCIÓN NUEVA 2</p>
+        <h2 id="reviews-title">Valoraciones</h2>
+        <p>Una valoración por estudiante y evento. Puedes actualizarla y consultar el promedio.</p>
+        <form id="review-form">
+          <label>Evento<select id="review-event" class="event-select" aria-label="Evento a valorar"></select></label>
+          <label>Puntuación<select name="rating"><option value="5">5 / 5</option><option value="4">4 / 5</option><option value="3">3 / 5</option><option value="2">2 / 5</option><option value="1">1 / 5</option></select></label>
+          <label>Comentario<textarea name="comment" required minlength="3" maxlength="1000" rows="3"></textarea></label>
+          <div class="actions"><button>Guardar valoración</button><button type="button" id="read-reviews" class="secondary">Consultar valoraciones</button></div>
+        </form>
+        <p id="review-status" role="status" aria-live="polite"></p>
+        <ul id="review-list"></ul>
+      </section>
+    </div>
+    <footer>Modo en memoria: datos temporales · Modo SQLite: datos conservados al reiniciar el servidor.</footer>
+  </main>
+</body>
+</html>
