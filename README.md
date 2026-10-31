@@ -20,6 +20,7 @@ React/Vite se publica como una web independiente y consume por HTTPS la API de e
 ## Documentación y ejecución
 
 - [Arquitectura, recursos, costos, requisitos del laboratorio y validación](docs/AZURE.md).
+- [Publicación automática comprobada: pruebas, backend y frontend en verde](https://github.com/mrcastilla8/taller-web-deploy/actions/runs/41200189943).
 - [Publicación manual, actualización y automatización](Backend/deploy/README.md).
 - [API y ejecución local](Backend/README.md).
 - [Frontend conectado a la API](Frontend/README.md).

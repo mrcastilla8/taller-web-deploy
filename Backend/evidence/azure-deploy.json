@@ -22,6 +22,8 @@
     "registry": "eventosfisiacre4262df5.azurecr.io",
     "manualImageTagVerified": "20261031a",
     "manualImageDigestVerified": "sha256:e64c30455749eac6a6f14b6994d86ffe5162127bf595ad0b45e12cc1c38b3bd6",
+    "currentImageTag": "fb9443b72829d0a53053388663c281e8a2488250",
+    "currentImageDigest": "sha256:8175b04a178abe74c110041c2b490af03e0d372e76cbd6291a535cf9c5b3e31e",
     "registryPullUsesManagedIdentity": true,
     "registryAdminEnabled": false
   },
@@ -41,8 +43,13 @@
     "branch": "master",
     "authentication": "OIDC",
     "firewallRuleWriteExplicitlyAuthorizedByOwner": "container-app-egress",
-    "firstRun": "pending_first_execution"
+    "validation": "success",
+    "verifiedRunId": 41200189943,
+    "verifiedRunUrl": "https://github.com/mrcastilla8/taller-web-deploy/actions/runs/41200189943",
+    "verifiedSourceCommit": "fb9443b72829d0a53053388663c281e8a2488250",
+    "jobs": { "test": "success", "deploy_backend": "success", "deploy_frontend": "success" }
   },
+  "previousCombinedApp": { "name": "eventosfisi-api-e4262df5", "state": "Stopped" },
   "costs": { "subscriptionType": "Azure for Students", "spendingLimit": "On", "convertedToPayAsYouGo": false, "individualFreeBenefitValidityVerified": false, "remainingCreditVerified": false },
   "limitations": ["Los nueve eventos originales ya están pasados.", "La sesión es de demostración; no hay autenticación por contraseña.", "Los beneficios de ACR y PostgreSQL dependen de la vigencia y cuotas estudiantiles."]
 }

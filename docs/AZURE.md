@@ -42,6 +42,10 @@ El backend usa Container Apps para ejecutar directamente la imagen Docker, expon
 
 ## URLs y estado de validación
 
+La [ejecución automática 41200189943](https://github.com/mrcastilla8/taller-web-deploy/actions/runs/41200189943) terminó con **success** en los tres jobs: pruebas, publicación del backend y publicación del frontend. La imagen publicada corresponde al commit `fb9443b72829d0a53053388663c281e8a2488250` y al digest `sha256:8175b04a178abe74c110041c2b490af03e0d372e76cbd6291a535cf9c5b3e31e`.
+
+Pasaron 18 pruebas del backend, la integración del cliente React con una API real, la construcción Docker y las comprobaciones públicas de PostgreSQL, rutas React y CORS. La web se revisó en el navegador cargando su catálogo desde la API. La aplicación conjunta anterior `eventosfisi-api-e4262df5` quedó detenida; se usan los dominios nuevos de esta sección.
+
 - Frontend: https://eventosfisi-web-e4262df5.azurewebsites.net/
 - Backend Docker: https://eventosfisi-docker-e4262df5.kindwater-fcfdd589.westus.azurecontainerapps.io
 - La URL real de backend y su imagen publicada se registran en [`Backend/evidence/azure-deploy.json`](../Backend/evidence/azure-deploy.json).

@@ -1,6 +1,6 @@
 # Evidencia del backend
 
-La evidencia local de esta página corresponde al 24 de octubre. La publicación posterior en Azure, verificada el **30 de octubre de 2026**, tiene su [resumen de resultados](azure-deploy.json) y [documentación de recursos y proceso](../../docs/AZURE.md). Las capturas y tiempos siguientes son de SQLite local.
+La evidencia local de esta página corresponde al 24 de octubre. La publicación inicial conjunta del 30 de octubre tiene su [resumen histórico](azure-deploy-2026-10-30.json). La arquitectura separada del **31 de octubre de 2026**, con Docker y publicación automática comprobada, tiene su [resumen actual](azure-deploy.json) y [documentación completa](../../docs/AZURE.md). Las capturas y tiempos siguientes son de SQLite local.
 
 Verificación realizada el 24 de octubre de 2026.
 
