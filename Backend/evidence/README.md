@@ -1,5 +1,7 @@
 # Evidencia del backend
 
+La evidencia local de esta página corresponde al 24 de octubre. La publicación posterior en Azure, verificada el **30 de octubre de 2026**, tiene su [resumen de resultados](azure-deploy.json) y [documentación de recursos y proceso](../../docs/AZURE.md). Las capturas y tiempos siguientes son de SQLite local.
+
 Verificación realizada el 24 de octubre de 2026.
 
 ## Ejecución reproducible
@@ -36,6 +38,7 @@ Capturas reales:
 - [Consulta ORM no bloqueante](navegador-orm.png).
 - [Valoración recuperada después de reiniciar el proceso](navegador-persistencia.png).
 
-Las capturas muestran datos ficticios de prueba. `Frontend/` se verificó contra
-el remoto: sus 26 archivos se conservaron sin cambios. Esta entrega contiene
-únicamente archivos de `Backend/`.
+Las capturas muestran datos ficticios de prueba. En esa verificación inicial,
+`Frontend/` se comparó con el remoto y sus 26 archivos se conservaron sin cambios.
+La entrega de ese momento contenía únicamente archivos de `Backend/`; la
+documentación de Azure enlazada arriba corresponde a la publicación posterior.

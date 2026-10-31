@@ -5,13 +5,14 @@ PostgreSQL para Azure. Implementa los
 requisitos de las dos imágenes: APIs de eventos, concurrencia, modo en memoria,
 persistencia con ORM y dos funciones nuevas que graban y consultan datos.
 
-**Alcance acordado: solo `Backend/`.** `Frontend/` conserva exactamente los archivos
-del remoto. El laboratorio es un cliente de prueba servido por este backend;
-la conexión del frontend original a las APIs queda para una etapa posterior.
+`Frontend/` conserva su lógica original. Su compilación puede servirse desde
+`Backend/web/`, junto a la API y el laboratorio. El laboratorio es un cliente
+de prueba de la API; la conexión de la web React a las APIs sigue pendiente.
 
-El despliegue de Azure está preparado en [deploy/README.md](deploy/README.md):
-App Service Linux y Azure Database for PostgreSQL. Requiere una suscripción
-habilitada; compilar la infraestructura localmente no equivale a desplegarla.
+El despliegue fue completado y verificado en Azure el 30 de octubre de 2026:
+App Service Linux F1 y Azure Database for PostgreSQL. Consultar las
+[URLs, recursos y resultados](../docs/AZURE.md) y la
+[guía para crear o actualizar el despliegue](deploy/README.md).
 
 ## Ejecutar
 

@@ -1,6 +1,22 @@
-# Desplegar el backend y su base de datos en Azure
+# Desplegar la web, la API y PostgreSQL en Azure
 
-Solo se publica `Backend/`. El frontend original queda intacto.
+El despliegue real está documentado en [docs/AZURE.md](../../docs/AZURE.md), con sus URLs, recursos, región, configuración, costos y resultados de validación.
+
+Se publica `Backend/`. Si contiene `web/index.html`, también se publica la web React compilada: la raíz muestra la web, `/api/*` mantiene la API y `/laboratorio.html` mantiene el laboratorio. El frontend conserva su comportamiento original con `localStorage`; publicar ambos no conecta automáticamente React con la API.
+
+Para incluir el frontend, desde la raíz del repositorio:
+
+```powershell
+Set-Location Frontend
+npm ci
+npm run build
+Set-Location ..
+New-Item -ItemType Directory -Path Backend/web -Force | Out-Null
+Copy-Item -Path Frontend/dist/* -Destination Backend/web -Recurse -Force
+Set-Location Backend
+```
+
+Las rutas React `/eventos/:id` y `/mis-eventos` devuelven `index.html`; las rutas de API y los archivos inexistentes mantienen sus respuestas 404.
 
 ## Infraestructura preparada
 
@@ -32,7 +48,7 @@ se detiene antes de crear o modificar recursos. Revisar la suscripción en el
 portal y la [guía de reactivación de Azure for Students](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/azurestudents-subscription-disabled).
 
 También deben comprobarse las regiones permitidas, las cuotas y el beneficio
-gratuito vigente. `eastus2` es el valor inicial del script; puede cambiarse con
+gratuito vigente. `brazilsouth` es el valor inicial del script, correspondiente a la publicación verificada; puede cambiarse con
 `-Location` para una región permitida por la cuenta.
 
 ## Preparar sin crear recursos
@@ -44,16 +60,16 @@ Desde `Backend/`, con Azure CLI y Bicep instalados:
 ```
 
 Compila las plantillas y crea `deploy/out/backend.zip`. El ZIP contiene `src/`,
-`public/`, `package.json` y `package-lock.json`; las dependencias se instalan en
+`public/`, `web/` si existe, `package.json` y `package-lock.json`; las dependencias se instalan en
 Azure sobre Linux. Los archivos SQLite, credenciales, evidencia y dependencias
 locales quedan fuera del paquete. `deploy/out/` está excluido de Git.
 
 ## Crear y publicar
 
-Una vez reactivada la suscripción y comprobados sus beneficios:
+Con una suscripción activa y sus beneficios comprobados:
 
 ```powershell
-.\deploy\azure.ps1 -SubscriptionId '<id-de-la-suscripcion>' -Location eastus2
+.\deploy\azure.ps1 -SubscriptionId '<id-de-la-suscripcion>' -Location brazilsouth
 ```
 
 El script crea el grupo `rg-eventos-fisi`, un App Service y PostgreSQL. Los nombres
@@ -68,7 +84,7 @@ plantilla contienen nombres y URLs, sin contraseñas. La plantilla configura
 
 Después se publica el ZIP y se ejecuta `scripts/smoke-remote.js`: comprueba HTTPS,
 conexión PostgreSQL, catálogo, grabación/consulta de favoritos y valoraciones.
-Crea un perfil de prueba único y lo elimina con sus datos al terminar.
+Crea un perfil de prueba único y lo elimina con sus datos al terminar. Si se incluye `web/`, también ejecuta `scripts/smoke-web.js` para comprobar la web, sus rutas, sus archivos y los errores 404.
 
 La base se inicializa con los modelos de Sequelize y el catálogo original. Los
 datos personales guardados en el SQLite local requieren una migración adicional
@@ -107,10 +123,9 @@ de demostrar que HTTP responde mientras una consulta ORM sigue ejecutándose.
 
 ## Estado de validación
 
-La plantilla compila localmente y el paquete se genera correctamente. Las 15
-pruebas locales de SQLite siguen pasando tras añadir PostgreSQL. La validación
-real de PostgreSQL, las cuotas y las URLs públicas requieren completar el
-despliegue en una suscripción habilitada.
+La publicación del 30 de octubre de 2026 se completó en Brazil South. La plantilla y las 25 reglas del firewall terminaron con `Succeeded`; Oryx compiló el paquete y App Service confirmó el arranque. Pasaron las 15 pruebas locales y las comprobaciones públicas de la web, la API, la conexión PostgreSQL y escritura/consulta de favoritos y valoraciones. Los perfiles temporales de comprobación se eliminaron al terminar.
+
+Ver [el resumen de evidencia](../evidence/azure-deploy.json) y [la documentación completa](../../docs/AZURE.md). La vigencia individual del beneficio gratuito y el saldo de crédito no se verificaron desde facturación.
 
 Fuentes oficiales:
 

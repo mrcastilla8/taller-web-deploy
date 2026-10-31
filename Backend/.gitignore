@@ -6,3 +6,4 @@ data/*.sqlite-wal
 .env
 deploy/out/
 *.parameters.local.json
+web/

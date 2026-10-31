@@ -2,7 +2,7 @@
 param(
   [string]$SubscriptionId,
   [string]$ResourceGroupName = 'rg-eventos-fisi',
-  [string]$Location = 'eastus2',
+  [string]$Location = 'brazilsouth',
   [ValidatePattern('^[a-z][a-z0-9-]{2,24}$')][string]$NamePrefix = 'eventosfisi',
   [switch]$PrepareOnly,
   [switch]$UpdateOnly
@@ -34,10 +34,13 @@ if (-not $PrepareOnly) {
 
 $taskOutput = Join-Path $PSScriptRoot 'out'
 New-Item -ItemType Directory -Path $taskOutput -Force | Out-Null
-Write-Host 'Validando Bicep y preparando un ZIP solo con el backend...'
+Write-Host 'Validando Bicep y preparando el ZIP de despliegue...'
 Invoke-Azure bicep build --file (Join-Path $PSScriptRoot 'main.bicep') --outfile (Join-Path $taskOutput 'main.json')
 $taskZip = Join-Path $taskOutput 'backend.zip'
 $taskSource = @('src', 'public', 'package.json', 'package-lock.json') | ForEach-Object { Join-Path $taskBackend $_ }
+if (Test-Path -LiteralPath (Join-Path $taskBackend 'web/index.html')) {
+  $taskSource += Join-Path $taskBackend 'web'
+}
 Compress-Archive -LiteralPath $taskSource -DestinationPath $taskZip -Force
 if ($PrepareOnly) { Write-Host ('Preparado: ' + $taskZip + '. No se crearon recursos de Azure.'); return }
 
@@ -50,7 +53,10 @@ $taskPostgresName = "$NamePrefix-pg-$taskSuffix"
 if (-not $UpdateOnly) {
   Write-Host 'Configuración: App Service F1; PostgreSQL B1ms, 32 GB, sin alta disponibilidad ni crecimiento automático.'
   Write-Host 'La gratuidad de PostgreSQL depende de los beneficios vigentes de la suscripción.'
-  Invoke-Azure group create --name $ResourceGroupName --location $Location --tags project=EventosFISI --output none
+  $taskGroupExists = Invoke-Azure group exists --name $ResourceGroupName --output tsv
+  if ($taskGroupExists -ne 'true') {
+    Invoke-Azure group create --name $ResourceGroupName --location $Location --tags project=EventosFISI --output none
+  }
   foreach ($taskProvider in @('Microsoft.Web', 'Microsoft.DBforPostgreSQL')) {
     Invoke-Azure provider register --namespace $taskProvider --wait --output none
   }
@@ -80,11 +86,17 @@ if (-not $UpdateOnly) {
   }
 }
 
-Write-Host 'Publicando únicamente el ZIP de Backend; las dependencias se instalan en Linux...'
+Write-Host 'Publicando el ZIP de Backend y la web compilada si está incluida; las dependencias se instalan en Linux...'
 Invoke-Azure webapp deploy --resource-group $ResourceGroupName --name $taskAppName --src-path $taskZip --type zip --output none
 $taskHost = Invoke-Azure webapp show --resource-group $ResourceGroupName --name $taskAppName --query defaultHostName --output tsv
 $taskUrl = 'https://' + $taskHost
 Write-Host ('Comprobando API y conexión PostgreSQL en ' + $taskUrl)
 & node (Join-Path $taskBackend 'scripts/smoke-remote.js') $taskUrl
 if ($LASTEXITCODE -ne 0) { throw 'El despliegue no superó la comprobación remota.' }
+if (Test-Path -LiteralPath (Join-Path $taskBackend 'web/index.html')) {
+  & node (Join-Path $taskBackend 'scripts/smoke-web.js') $taskUrl
+  if ($LASTEXITCODE -ne 0) { throw 'La web publicada no superó la comprobación remota.' }
+}
 Write-Host ('Laboratorio: ' + $taskUrl + '/laboratorio.html')
+Write-Host ('Web: ' + $taskUrl)
+Write-Host ('API: ' + $taskUrl + '/api/events')

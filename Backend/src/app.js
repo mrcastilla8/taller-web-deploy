@@ -1,4 +1,5 @@
 import express from 'express'
+import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -147,6 +148,13 @@ export function createApp(db, { log = console.log } = {}) {
   })
   app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta de API no encontrada.' }))
   app.use(express.static(fileURLToPath(new URL('../public', import.meta.url))))
+  const frontend = fileURLToPath(new URL('../web/', import.meta.url))
+  if (existsSync(new URL('../web/index.html', import.meta.url))) {
+    app.use(express.static(frontend))
+    app.get(['/', '/eventos/:id', '/mis-eventos'], (req, res) => {
+      res.sendFile('index.html', { root: frontend })
+    })
+  }
   app.get('/', (req, res) => res.redirect('/laboratorio.html'))
   app.use((req, res) => res.status(404).json({ error: 'Recurso no encontrado.' }))
   app.use((error, req, res, next) => {
