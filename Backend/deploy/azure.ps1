@@ -2,101 +2,59 @@
 param(
   [string]$SubscriptionId,
   [string]$ResourceGroupName = 'rg-eventos-fisi',
+  [string]$ResourceSuffix = 'e4262df5',
   [string]$Location = 'brazilsouth',
-  [ValidatePattern('^[a-z][a-z0-9-]{2,24}$')][string]$NamePrefix = 'eventosfisi',
+  [string]$ContainerLocation = 'westus',
+  [ValidatePattern('^[a-zA-Z0-9_.-]+$')][string]$ImageTag = ('deploy-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss')),
+  [string]$CredentialSourceAppName,
   [switch]$PrepareOnly,
   [switch]$UpdateOnly
 )
-
 $ErrorActionPreference = 'Stop'
-$taskBackend = Split-Path -Parent $PSScriptRoot
-$taskAzCommand = Get-Command az -ErrorAction SilentlyContinue
-$taskAz = if ($taskAzCommand) { $taskAzCommand.Source } else {
-  Join-Path $env:ProgramFiles 'Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
-}
-if (-not (Test-Path -LiteralPath $taskAz)) { throw 'Instala Azure CLI antes de continuar.' }
-
-function Invoke-Azure {
+$backend = Split-Path -Parent $PSScriptRoot
+$repository = Split-Path -Parent $backend
+function Invoke-Az {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-  $taskResult = & $taskAz @Arguments
+  $result = & az @Arguments
   if ($LASTEXITCODE -ne 0) { throw ('Azure CLI falló: ' + ($Arguments[0..([Math]::Min(2, $Arguments.Length - 1))] -join ' ')) }
-  return $taskResult
+  return $result
 }
-
 if (-not $PrepareOnly) {
-  if (-not $SubscriptionId) { throw 'Indica -SubscriptionId. Para preparar sin crear recursos usa -PrepareOnly.' }
-  $taskAccount = (Invoke-Azure account show --subscription $SubscriptionId --output json) | ConvertFrom-Json
-  if ($taskAccount.state -ne 'Enabled') {
-    throw ('La suscripción está ' + $taskAccount.state + '. No se ha creado ni modificado ningún recurso. Reactiva Azure for Students.')
-  }
-  Invoke-Azure account set --subscription $SubscriptionId --output none
+  if (-not $SubscriptionId) { throw 'Indica -SubscriptionId o usa -PrepareOnly.' }
+  $account = (Invoke-Az account show --subscription $SubscriptionId --output json) | ConvertFrom-Json
+  if ($account.state -ne 'Enabled') { throw 'La suscripción debe estar habilitada.' }
 }
-
-$taskOutput = Join-Path $PSScriptRoot 'out'
-New-Item -ItemType Directory -Path $taskOutput -Force | Out-Null
-Write-Host 'Validando Bicep y preparando el ZIP de despliegue...'
-Invoke-Azure bicep build --file (Join-Path $PSScriptRoot 'main.bicep') --outfile (Join-Path $taskOutput 'main.json')
-$taskZip = Join-Path $taskOutput 'backend.zip'
-$taskSource = @('src', 'public', 'package.json', 'package-lock.json') | ForEach-Object { Join-Path $taskBackend $_ }
-if (Test-Path -LiteralPath (Join-Path $taskBackend 'web/index.html')) {
-  $taskSource += Join-Path $taskBackend 'web'
+$outputDirectory = Join-Path $PSScriptRoot 'out'
+New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+foreach ($template in @('container-foundation', 'container-api')) {
+  Invoke-Az bicep build --file (Join-Path $PSScriptRoot ($template + '.bicep')) --outfile (Join-Path $outputDirectory ($template + '.json'))
 }
-Compress-Archive -LiteralPath $taskSource -DestinationPath $taskZip -Force
-if ($PrepareOnly) { Write-Host ('Preparado: ' + $taskZip + '. No se crearon recursos de Azure.'); return }
-
-$taskSha = [Security.Cryptography.SHA256]::Create()
-try { $taskSuffix = ([BitConverter]::ToString($taskSha.ComputeHash([Text.Encoding]::UTF8.GetBytes($SubscriptionId + $NamePrefix)))).Replace('-', '').Substring(0, 8).ToLowerInvariant() }
-finally { $taskSha.Dispose() }
-$taskAppName = "$NamePrefix-api-$taskSuffix"
-$taskPostgresName = "$NamePrefix-pg-$taskSuffix"
-
+$registry = "eventosfisiacr$ResourceSuffix"
+$image = "$registry.azurecr.io/eventos-backend:$ImageTag"
+& docker build --tag $image $backend
+if ($LASTEXITCODE -ne 0) { throw 'La imagen Docker no se pudo construir.' }
+if ($PrepareOnly) {
+  Write-Host ('Imagen preparada: ' + $image + '. No se crearon recursos de Azure. El frontend se compila por separado al publicar con la URL real de la API.')
+  return
+}
 if (-not $UpdateOnly) {
-  Write-Host 'Configuración: App Service F1; PostgreSQL B1ms, 32 GB, sin alta disponibilidad ni crecimiento automático.'
-  Write-Host 'La gratuidad de PostgreSQL depende de los beneficios vigentes de la suscripción.'
-  $taskGroupExists = Invoke-Azure group exists --name $ResourceGroupName --output tsv
-  if ($taskGroupExists -ne 'true') {
-    Invoke-Azure group create --name $ResourceGroupName --location $Location --tags project=EventosFISI --output none
-  }
-  foreach ($taskProvider in @('Microsoft.Web', 'Microsoft.DBforPostgreSQL')) {
-    Invoke-Azure provider register --namespace $taskProvider --wait --output none
-  }
-  $taskExisting = Invoke-Azure resource list --resource-group $ResourceGroupName --resource-type Microsoft.Web/sites --query '[].name' --output tsv
-  if (@($taskExisting) -contains $taskAppName) {
-    throw 'La aplicación ya existe. Usa -UpdateOnly para actualizar el código sin cambiar credenciales o infraestructura.'
-  }
-  $taskRandom = [Security.Cryptography.RandomNumberGenerator]::Create()
-  $taskBytes = New-Object byte[] 32
-  try { $taskRandom.GetBytes($taskBytes) } finally { $taskRandom.Dispose() }
-  $taskPassword = 'Aa1!' + [Convert]::ToBase64String($taskBytes).Replace('+', '-').Replace('/', '_')
-  $taskParameters = @{
-    location = @{ value = $Location }
-    appName = @{ value = $taskAppName }
-    postgresServerName = @{ value = $taskPostgresName }
-    postgresPassword = @{ value = $taskPassword }
-  }
-  $taskParametersFile = Join-Path ([IO.Path]::GetTempPath()) ('eventos-azure-' + [Guid]::NewGuid().ToString('N') + '.parameters.json')
-  try {
-    @{ parameters = $taskParameters } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskParametersFile -Encoding utf8
-    $taskPassword = $null
-    Invoke-Azure deployment group validate --resource-group $ResourceGroupName --template-file (Join-Path $PSScriptRoot 'main.bicep') --parameters ('@' + $taskParametersFile) --output none
-    Invoke-Azure deployment group create --resource-group $ResourceGroupName --name eventos-fisi --template-file (Join-Path $PSScriptRoot 'main.bicep') --parameters ('@' + $taskParametersFile) --query properties.outputs --output json
-  } finally {
-    if (Test-Path -LiteralPath $taskParametersFile) { Remove-Item -LiteralPath $taskParametersFile }
-    $taskParameters = $null
-  }
+  Invoke-Az deployment group create --subscription $SubscriptionId --resource-group $ResourceGroupName --name eventos-contenedores-foundation --template-file (Join-Path $PSScriptRoot 'container-foundation.bicep') --parameters "location=$Location" "containerLocation=$ContainerLocation" "resourceSuffix=$ResourceSuffix" --output none
 }
-
-Write-Host 'Publicando el ZIP de Backend y la web compilada si está incluida; las dependencias se instalan en Linux...'
-Invoke-Azure webapp deploy --resource-group $ResourceGroupName --name $taskAppName --src-path $taskZip --type zip --output none
-$taskHost = Invoke-Azure webapp show --resource-group $ResourceGroupName --name $taskAppName --query defaultHostName --output tsv
-$taskUrl = 'https://' + $taskHost
-Write-Host ('Comprobando API y conexión PostgreSQL en ' + $taskUrl)
-& node (Join-Path $taskBackend 'scripts/smoke-remote.js') $taskUrl
-if ($LASTEXITCODE -ne 0) { throw 'El despliegue no superó la comprobación remota.' }
-if (Test-Path -LiteralPath (Join-Path $taskBackend 'web/index.html')) {
-  & node (Join-Path $taskBackend 'scripts/smoke-web.js') $taskUrl
-  if ($LASTEXITCODE -ne 0) { throw 'La web publicada no superó la comprobación remota.' }
-}
-Write-Host ('Laboratorio: ' + $taskUrl + '/laboratorio.html')
-Write-Host ('Web: ' + $taskUrl)
-Write-Host ('API: ' + $taskUrl + '/api/events')
+Invoke-Az acr login --subscription $SubscriptionId --name $registry --output none
+& docker push $image
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo subir la imagen al registro.' }
+& (Join-Path $PSScriptRoot 'publish-container.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -ResourceSuffix $ResourceSuffix -ImageTag $ImageTag -Location $ContainerLocation -CredentialSourceAppName $CredentialSourceAppName
+& (Join-Path $PSScriptRoot 'sync-postgres-firewall.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -ResourceSuffix $ResourceSuffix -ImageTag $ImageTag
+$apiName = "eventosfisi-docker-$ResourceSuffix"
+$fqdn = Invoke-Az containerapp show --subscription $SubscriptionId --resource-group $ResourceGroupName --name $apiName --query properties.configuration.ingress.fqdn --output tsv
+$url = 'https://' + $fqdn
+& node (Join-Path $backend 'scripts/smoke-remote.js') $url
+if ($LASTEXITCODE -ne 0) { throw 'El backend no superó las comprobaciones con PostgreSQL.' }
+& (Join-Path $PSScriptRoot 'publish-frontend.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -ResourceSuffix $ResourceSuffix
+$frontHost = Invoke-Az webapp show --subscription $SubscriptionId --resource-group $ResourceGroupName --name "eventosfisi-web-$ResourceSuffix" --query defaultHostName --output tsv
+$frontUrl = 'https://' + $frontHost
+& node (Join-Path $backend 'scripts/smoke-web.js') $frontUrl $url
+if ($LASTEXITCODE -ne 0) { throw 'La web no superó la comprobación de integración.' }
+Write-Host ('Frontend: ' + $frontUrl)
+Write-Host ('Backend Docker: ' + $url)
+Write-Host ('Salud: ' + $url + '/health')

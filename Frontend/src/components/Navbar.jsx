@@ -2,7 +2,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 function Navbar() {
-  const { student, clearStudent, inscriptions, openModal } = useApp()
+  const { student, busy, loading, clearStudent, inscriptions, openModal } = useApp()
 
   return (
     <header className="navbar">
@@ -55,13 +55,16 @@ function Navbar() {
                 onClick={() => openModal(null)}
                 className="btn btn--ghost btn--sm"
                 title="Editar mis datos"
+                disabled={busy}
               >
                 Editar
               </button>
               <button
                 onClick={clearStudent}
                 className="btn btn--ghost btn--sm navbar__exit-btn"
-                title="Borrar mis datos de este dispositivo"
+                title="Eliminar mi perfil y sus datos del servidor"
+                aria-label="Eliminar mi perfil y sus datos del servidor"
+                disabled={busy}
               >
                 ✕
               </button>
@@ -70,6 +73,7 @@ function Navbar() {
             <button
               onClick={() => openModal(null)}
               className="btn btn--primary btn--sm"
+              disabled={loading || busy}
             >
               👤 Identificarme
             </button>

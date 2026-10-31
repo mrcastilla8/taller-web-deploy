@@ -1,0 +1,138 @@
+name: Probar y desplegar en Azure
+
+on:
+  push:
+    branches: [master]
+    paths: ['Frontend/**', 'Backend/**', '.github/workflows/deploy-azure.yml', '!Frontend/**/*.md', '!Backend/**/*.md', '!Backend/evidence/**', '!Backend/deploy/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-master
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-eventos-fisi
+  REGISTRY: eventosfisiacre4262df5
+  BACKEND: eventosfisi-docker-e4262df5
+  FRONTEND: eventosfisi-web-e4262df5
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            Backend/package-lock.json
+            Frontend/package-lock.json
+      - name: Detectar aplicaciones modificadas
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          before = os.environ.get('BEFORE', '')
+          valid = before and before != '0' * 40 and subprocess.run(['git', 'cat-file', '-e', before], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+          files = subprocess.check_output(['git', 'diff', '--name-only', before, 'HEAD']).decode().splitlines() if valid else []
+          all_apps = os.environ['EVENT_NAME'] == 'workflow_dispatch' or not valid or '.github/workflows/deploy-azure.yml' in files
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              for name, prefix in [('frontend', 'Frontend/'), ('backend', 'Backend/')]:
+                  out.write(f'{name}={str(all_apps or any(f.startswith(prefix) for f in files)).lower()}\n')
+          PY
+      - run: npm ci --prefix Backend --no-audit --no-fund
+      - run: npm ci --prefix Frontend --no-audit --no-fund
+      - run: npm test --prefix Backend
+      - run: npm test --prefix Frontend
+      - run: npm run build --prefix Frontend
+      - name: Comprobar construcción Docker
+        if: steps.changes.outputs.backend == 'true'
+        run: docker build --tag eventos-backend-check Backend
+
+  deploy_backend:
+    needs: test
+    if: needs.test.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - uses: azure/login@v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Construir, subir y publicar el microservicio
+        run: |
+          set -euo pipefail
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az acr login --name "$REGISTRY" --output none
+          IMAGE="$REGISTRY.azurecr.io/eventos-backend:$GITHUB_SHA"
+          docker build --tag "$IMAGE" Backend
+          docker push "$IMAGE"
+          PREVIOUS=$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$BACKEND" --query 'properties.template.containers[0].image' --output tsv)
+          az containerapp update --resource-group "$RESOURCE_GROUP" --name "$BACKEND" --image "$IMAGE" --no-wait --output none
+          EGRESS_IP=''
+          for attempt in $(seq 1 18); do
+            REVISION=$(az containerapp revision list --resource-group "$RESOURCE_GROUP" --name "$BACKEND" --query "[?properties.template.containers[0].image=='$IMAGE'].name | [0]" --output tsv)
+            if [ -n "$REVISION" ]; then
+              script -q -e -c "az containerapp exec --resource-group '$RESOURCE_GROUP' --name '$BACKEND' --revision '$REVISION' --container eventos-api --command 'node /app/src/egress.js'" egress.log || true
+              EGRESS_IP=$(python3 -c "import re,ipaddress; s=open('egress.log').read(); m=re.findall(r'EGRESS_IP=(\d+(?:\.\d+){3})',s); print(m[-1] if m and ipaddress.ip_address(m[-1]).is_global else '')")
+              if [ -n "$EGRESS_IP" ]; then break; fi
+            fi
+            sleep 10
+          done
+          test -n "$EGRESS_IP"
+          az postgres flexible-server firewall-rule update --resource-group "$RESOURCE_GROUP" --server-name eventosfisi-pg-e4262df5 --name container-app-egress --start-ip-address "$EGRESS_IP" --end-ip-address "$EGRESS_IP" --output none
+          URL="https://$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$BACKEND" --query properties.configuration.ingress.fqdn --output tsv)"
+          npm ci --prefix Backend --no-audit --no-fund
+          if ! node Backend/scripts/smoke-remote.js "$URL"; then
+            echo 'La comprobación PostgreSQL falló. Restaurando la imagen anterior.'
+            az containerapp update --resource-group "$RESOURCE_GROUP" --name "$BACKEND" --image "$PREVIOUS" --output none
+            exit 1
+          fi
+
+  deploy_frontend:
+    needs: [test, deploy_backend]
+    if: always() && needs.test.result == 'success' && needs.test.outputs.frontend == 'true' && (needs.deploy_backend.result == 'success' || needs.deploy_backend.result == 'skipped')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - uses: azure/login@v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Compilar React con la URL real y publicar su paquete independiente
+        run: |
+          set -euo pipefail
+          az config set extension.use_dynamic_install=yes_without_prompt
+          export VITE_API_BASE_URL="https://$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$BACKEND" --query properties.configuration.ingress.fqdn --output tsv)"
+          npm ci --prefix Frontend --no-audit --no-fund
+          npm run build --prefix Frontend
+          (cd Frontend && zip -qr ../frontend.zip dist server.mjs)
+          az webapp deploy --resource-group "$RESOURCE_GROUP" --name "$FRONTEND" --src-path frontend.zip --type zip --output none
+          FRONT_URL="https://$(az webapp show --resource-group "$RESOURCE_GROUP" --name "$FRONTEND" --query defaultHostName --output tsv)"
+          node Backend/scripts/smoke-web.js "$FRONT_URL" "$VITE_API_BASE_URL"

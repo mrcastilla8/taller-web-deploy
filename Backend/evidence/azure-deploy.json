@@ -1,67 +1,48 @@
 {
-  "description": "Resumen de comprobaciones realizadas; no es un volcado de logs de Azure.",
-  "verifiedDate": "2026-10-30",
+  "description": "Resumen de comprobaciones del despliegue separado; no contiene credenciales ni es un volcado de logs.",
+  "verifiedDate": "2026-10-31",
   "timezone": "America/Lima",
-  "baseSourceCommit": "7bc68faa0dad490a7cefcd4350d79b42f0e8be2e",
-  "baseUrl": "https://eventosfisi-api-e4262df5.azurewebsites.net",
+  "frontendUrl": "https://eventosfisi-web-e4262df5.azurewebsites.net",
+  "backendUrl": "https://eventosfisi-docker-e4262df5.kindwater-fcfdd589.westus.azurecontainerapps.io",
   "resourceGroup": "rg-eventos-fisi",
-  "resourceGroupMetadataLocation": "northcentralus",
-  "resourceLocation": "brazilsouth",
-  "app": {
-    "name": "eventosfisi-api-e4262df5",
-    "plan": "eventosfisi-api-e4262df5-plan",
-    "sku": "F1",
-    "tier": "Free",
-    "os": "Linux",
-    "runtime": "NODE|24-lts",
-    "httpsOnly": true,
-    "deploymentStatus": "Succeeded"
+  "frontend": { "name": "eventosfisi-web-e4262df5", "location": "brazilsouth", "sku": "F1", "package": "dist/ y server.mjs", "usesRemoteApi": true },
+  "backend": {
+    "name": "eventosfisi-docker-e4262df5",
+    "location": "westus",
+    "environment": "eventosfisi-env-docker-e4262df5",
+    "environmentMode": "WorkloadProfiles",
+    "workloadProfile": "Consumption",
+    "cpu": 0.25,
+    "memoryGiB": 0.5,
+    "minReplicas": 0,
+    "maxReplicas": 1,
+    "port": 8080,
+    "healthPath": "/health",
+    "readinessPath": "/api/ready",
+    "registry": "eventosfisiacre4262df5.azurecr.io",
+    "manualImageTagVerified": "20261031a",
+    "manualImageDigestVerified": "sha256:e64c30455749eac6a6f14b6994d86ffe5162127bf595ad0b45e12cc1c38b3bd6",
+    "registryPullUsesManagedIdentity": true,
+    "registryAdminEnabled": false
   },
-  "database": {
-    "server": "eventosfisi-pg-e4262df5",
-    "name": "eventos",
-    "engine": "PostgreSQL",
-    "version": "16",
-    "sku": "Standard_B1ms",
-    "storageGb": 32,
-    "autoGrow": "Disabled",
-    "highAvailability": "Disabled",
-    "backupRetentionDays": 7,
-    "geoRedundantBackup": "Disabled",
-    "tlsCertificateValidation": true,
-    "firewallRulesSucceeded": 25
-  },
-  "infrastructure": {
-    "deployment": "eventos-fisi",
-    "state": "Succeeded",
-    "firewallDeploymentState": "Succeeded"
-  },
+  "database": { "server": "eventosfisi-pg-e4262df5", "name": "eventos", "engine": "PostgreSQL 16", "sku": "Standard_B1ms", "storageGb": 32, "tlsCertificateValidation": true, "preservedExistingData": true },
   "checks": {
-    "frontendBuild": "passed",
-    "localApiTestsPassed": 15,
-    "httpsHomeAndReactRoutes": "passed",
-    "httpsStaticAssetsAnd404": "passed",
-    "httpsLaboratory": "passed",
-    "postgresReadiness": "passed",
-    "temporaryProfile": "passed",
-    "favoriteWriteAndRead": "passed",
-    "reviewWriteAndRead": "passed",
-    "temporaryDataCleanup": "passed",
-    "browserCatalogAndDirectEventDetail": "passed",
-    "azurePersistenceAcrossAppRestart": "not_tested",
-    "azureConcurrencyTiming": "not_recorded"
+    "backendLocalTestsPassed": 18,
+    "frontendApiIntegrationTestsPassed": 1,
+    "dockerHealthcheck": "healthy",
+    "dockerNonRootAndNoBundledFrontend": "passed",
+    "publicPostgresProfileFavoritesReviewsAndCleanup": "passed",
+    "publicSeparateOriginsAndReactRoutes": "passed",
+    "publicCorsAllowedOriginPreflightAndDeniedOrigin": "passed",
+    "browserCatalogFromRemoteApi": "passed"
   },
-  "costs": {
-    "subscriptionType": "Azure for Students",
-    "spendingLimit": "On",
-    "convertedToPayAsYouGo": false,
-    "individualPostgresFreeBenefitValidityVerified": false,
-    "remainingCreditVerified": false,
-    "note": "PostgreSQL depende del beneficio vigente o del crédito; no se garantiza gratuidad permanente."
+  "automation": {
+    "workflow": ".github/workflows/deploy-azure.yml",
+    "branch": "master",
+    "authentication": "OIDC",
+    "firewallRuleWriteExplicitlyAuthorizedByOwner": "container-app-egress",
+    "firstRun": "pending_first_execution"
   },
-  "limitations": [
-    "La web React conserva su catálogo local y datos en localStorage; el laboratorio sí utiliza la API y PostgreSQL.",
-    "Los nueve eventos originales tienen fechas pasadas al día de publicación.",
-    "No hay un borrado programado de recursos."
-  ]
+  "costs": { "subscriptionType": "Azure for Students", "spendingLimit": "On", "convertedToPayAsYouGo": false, "individualFreeBenefitValidityVerified": false, "remainingCreditVerified": false },
+  "limitations": ["Los nueve eventos originales ya están pasados.", "La sesión es de demostración; no hay autenticación por contraseña.", "Los beneficios de ACR y PostgreSQL dependen de la vigencia y cuotas estudiantiles."]
 }

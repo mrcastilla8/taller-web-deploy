@@ -1,5 +1,4 @@
 import express from 'express'
-import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -18,11 +17,28 @@ function integer(value, min, max, label) {
   return number
 }
 
-export function createApp(db, { log = console.log } = {}) {
+export function createApp(db, {
+  log = console.log,
+  allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((origin) => origin.trim()).filter(Boolean),
+} = {}) {
   const app = express()
   let pendingDelays = 0
   let pendingQueries = 0
   app.disable('x-powered-by')
+  const origins = new Set(allowedOrigins)
+  app.use('/api', (req, res, next) => {
+    res.vary('Origin')
+    const origin = req.get('Origin')
+    if (origin && !origins.has(origin)) return res.status(403).json({ error: 'Origen no permitido.' })
+    if (origin) {
+      res.set('Access-Control-Allow-Origin', origin)
+      res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+      res.set('Access-Control-Allow-Headers', 'Content-Type,X-Session-Id')
+      res.set('Access-Control-Expose-Headers', 'X-Request-Id')
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204)
+    next()
+  })
   app.use('/api', (req, res, next) => {
     const requestId = randomUUID()
     const start = performance.now()
@@ -46,7 +62,7 @@ export function createApp(db, { log = console.log } = {}) {
   const eventId = (req) => integer(req.params.id, 1, 2147483647, 'El ID del evento')
   const state = async (req, res) => res.json(await db.state(session(req)))
 
-  app.get('/api/health', (req, res) => res.json({
+  app.get(['/health', '/api/health'], (req, res) => res.set('Cache-Control', 'no-store').json({
     status: 'ok', storage: db.dialect === 'postgres' ? 'postgres' : db.storage === ':memory:' ? 'memory' : 'sqlite',
     pendingDelays, pendingQueries,
   }))
@@ -148,13 +164,6 @@ export function createApp(db, { log = console.log } = {}) {
   })
   app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta de API no encontrada.' }))
   app.use(express.static(fileURLToPath(new URL('../public', import.meta.url))))
-  const frontend = fileURLToPath(new URL('../web/', import.meta.url))
-  if (existsSync(new URL('../web/index.html', import.meta.url))) {
-    app.use(express.static(frontend))
-    app.get(['/', '/eventos/:id', '/mis-eventos'], (req, res) => {
-      res.sendFile('index.html', { root: frontend })
-    })
-  }
   app.get('/', (req, res) => res.redirect('/laboratorio.html'))
   app.use((req, res) => res.status(404).json({ error: 'Recurso no encontrado.' }))
   app.use((error, req, res, next) => {

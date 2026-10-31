@@ -1,0 +1,67 @@
+{
+  "description": "Resumen de comprobaciones realizadas; no es un volcado de logs de Azure.",
+  "verifiedDate": "2026-10-30",
+  "timezone": "America/Lima",
+  "baseSourceCommit": "7bc68faa0dad490a7cefcd4350d79b42f0e8be2e",
+  "baseUrl": "https://eventosfisi-api-e4262df5.azurewebsites.net",
+  "resourceGroup": "rg-eventos-fisi",
+  "resourceGroupMetadataLocation": "northcentralus",
+  "resourceLocation": "brazilsouth",
+  "app": {
+    "name": "eventosfisi-api-e4262df5",
+    "plan": "eventosfisi-api-e4262df5-plan",
+    "sku": "F1",
+    "tier": "Free",
+    "os": "Linux",
+    "runtime": "NODE|24-lts",
+    "httpsOnly": true,
+    "deploymentStatus": "Succeeded"
+  },
+  "database": {
+    "server": "eventosfisi-pg-e4262df5",
+    "name": "eventos",
+    "engine": "PostgreSQL",
+    "version": "16",
+    "sku": "Standard_B1ms",
+    "storageGb": 32,
+    "autoGrow": "Disabled",
+    "highAvailability": "Disabled",
+    "backupRetentionDays": 7,
+    "geoRedundantBackup": "Disabled",
+    "tlsCertificateValidation": true,
+    "firewallRulesSucceeded": 25
+  },
+  "infrastructure": {
+    "deployment": "eventos-fisi",
+    "state": "Succeeded",
+    "firewallDeploymentState": "Succeeded"
+  },
+  "checks": {
+    "frontendBuild": "passed",
+    "localApiTestsPassed": 15,
+    "httpsHomeAndReactRoutes": "passed",
+    "httpsStaticAssetsAnd404": "passed",
+    "httpsLaboratory": "passed",
+    "postgresReadiness": "passed",
+    "temporaryProfile": "passed",
+    "favoriteWriteAndRead": "passed",
+    "reviewWriteAndRead": "passed",
+    "temporaryDataCleanup": "passed",
+    "browserCatalogAndDirectEventDetail": "passed",
+    "azurePersistenceAcrossAppRestart": "not_tested",
+    "azureConcurrencyTiming": "not_recorded"
+  },
+  "costs": {
+    "subscriptionType": "Azure for Students",
+    "spendingLimit": "On",
+    "convertedToPayAsYouGo": false,
+    "individualPostgresFreeBenefitValidityVerified": false,
+    "remainingCreditVerified": false,
+    "note": "PostgreSQL depende del beneficio vigente o del crédito; no se garantiza gratuidad permanente."
+  },
+  "limitations": [
+    "La web React conserva su catálogo local y datos en localStorage; el laboratorio sí utiliza la API y PostgreSQL.",
+    "Los nueve eventos originales tienen fechas pasadas al día de publicación.",
+    "No hay un borrado programado de recursos."
+  ]
+}

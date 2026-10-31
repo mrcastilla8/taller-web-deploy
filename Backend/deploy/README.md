@@ -1,135 +1,112 @@
-# Desplegar la web, la API y PostgreSQL en Azure
+# Publicar frontend y backend Docker por separado
 
-El despliegue real está documentado en [docs/AZURE.md](../../docs/AZURE.md), con sus URLs, recursos, región, configuración, costos y resultados de validación.
+Consultar [docs/AZURE.md](../../docs/AZURE.md) para las URLs reales, regiones, recursos y evidencia. El despliegue conjunto anterior se conserva como [historial](../../docs/AZURE-2026-10-30.md).
 
-Se publica `Backend/`. Si contiene `web/index.html`, también se publica la web React compilada: la raíz muestra la web, `/api/*` mantiene la API y `/laboratorio.html` mantiene el laboratorio. El frontend conserva su comportamiento original con `localStorage`; publicar ambos no conecta automáticamente React con la API.
+## Requisitos
 
-Para incluir el frontend, desde la raíz del repositorio:
+- PowerShell 7, Node.js 24, npm, Azure CLI con Bicep y la extensión `containerapp`.
+- Docker Desktop con el motor Linux iniciado.
+- Suscripción activa de Azure, cuota y regiones permitidas revisadas.
+- Para esta migración: el grupo `rg-eventos-fisi`, el plan F1 `eventosfisi-api-e4262df5-plan` y PostgreSQL `eventosfisi-pg-e4262df5` ya existen. Se reutilizan para conservar los datos. Las plantillas de contenedores no crean ni reemplazan esa base de datos.
 
-```powershell
-Set-Location Frontend
-npm ci
-npm run build
-Set-Location ..
-New-Item -ItemType Directory -Path Backend/web -Force | Out-Null
-Copy-Item -Path Frontend/dist/* -Destination Backend/web -Recurse -Force
-Set-Location Backend
-```
-
-Las rutas React `/eventos/:id` y `/mis-eventos` devuelven `index.html`; las rutas de API y los archivos inexistentes mantienen sus respuestas 404.
-
-## Infraestructura preparada
-
-| Recurso | Configuración |
-|---|---|
-| App Service | Linux, Node.js 24 LTS, plan F1 |
-| Base de datos | Azure Database for PostgreSQL Flexible Server, versión 16 |
-| Cómputo de BD | Burstable `Standard_B1ms` |
-| Almacenamiento | 32 GB, crecimiento automático desactivado |
-| Copias | Retención de 7 días, redundancia geográfica desactivada |
-| Conexión | TLS con validación del certificado |
-| Firewall de BD | Solo IPs de salida actuales y posibles de App Service |
-
-Azure publica un beneficio de estudiantes de 750 horas B1ms, 32 GB de datos y
-32 GB de backup al mes durante 12 meses para cuentas elegibles. La disponibilidad
-depende de la suscripción, la vigencia del beneficio, la región y las cuotas.
-F1 es el plan gratuito de App Service, con sus límites de uso. El script no
-sustituye planes ni tamaños por otros de pago si Azure rechaza la configuración.
-
-## Comprobación previa obligatoria
+Desde la raíz del repositorio:
 
 ```powershell
 az login --use-device-code
-az account list --all --query '[].{name:name,id:id,state:state}' --output table
+az account list --all --output table
+az extension add --name containerapp --upgrade
+Set-Location Backend
+npm ci
+Set-Location ../Frontend
+npm ci
+Set-Location ../Backend
 ```
 
-La suscripción elegida debe mostrar `Enabled`. Si aparece `Disabled`, el script
-se detiene antes de crear o modificar recursos. Revisar la suscripción en el
-portal y la [guía de reactivación de Azure for Students](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/azurestudents-subscription-disabled).
+## Construir y comprobar Docker localmente
 
-También deben comprobarse las regiones permitidas, las cuotas y el beneficio
-gratuito vigente. `brazilsouth` es el valor inicial del script, correspondiente a la publicación verificada; puede cambiarse con
-`-Location` para una región permitida por la cuenta.
+Desde `Backend/`:
 
-## Preparar sin crear recursos
+```powershell
+docker build --tag eventosfisi-backend:local .
+docker run --rm --publish 127.0.0.1:8080:8080 eventosfisi-backend:local node src/server.js --memory
+```
 
-Desde `Backend/`, con Azure CLI y Bicep instalados:
+Abrir `http://localhost:8080/health` y `http://localhost:8080/laboratorio.html`. El modo memoria es temporal; en Azure se usa PostgreSQL. El contenedor se ejecuta con el usuario `node`. La base Debian Trixie de Node.js 24 es compatible con el binario de SQLite 6 que también usa el proyecto en las pruebas locales; `allowScripts` autoriza únicamente su instalación nativa.
+
+`dockerignore`, recibido como referencia, se incorporó con el nombre correcto **`.dockerignore`**. El Dockerfile omite `web/`, `support/` y las dependencias locales. La aplicación se inicia directamente con Node para recibir las señales de parada.
+
+## Preparar sin modificar Azure
 
 ```powershell
 .\deploy\azure.ps1 -PrepareOnly
 ```
 
-Compila las plantillas y crea `deploy/out/backend.zip`. El ZIP contiene `src/`,
-`public/`, `web/` si existe, `package.json` y `package-lock.json`; las dependencias se instalan en
-Azure sobre Linux. Los archivos SQLite, credenciales, evidencia y dependencias
-locales quedan fuera del paquete. `deploy/out/` está excluido de Git.
+Compila las plantillas y construye la imagen local. El frontend se compila por separado, al publicar, con la URL real del backend.
 
-## Crear y publicar
-
-Con una suscripción activa y sus beneficios comprobados:
+## Primera migración de los recursos existentes
 
 ```powershell
-.\deploy\azure.ps1 -SubscriptionId '<id-de-la-suscripcion>' -Location brazilsouth
+.\deploy\azure.ps1 -SubscriptionId '<id-suscripcion-activa>' -ImageTag 'version-inicial' -CredentialSourceAppName eventosfisi-api-e4262df5
 ```
 
-El script crea el grupo `rg-eventos-fisi`, un App Service y PostgreSQL. Los nombres
-incluyen un sufijo calculado a partir de la suscripción y el prefijo para evitar
-colisiones. El nombre del grupo y el prefijo se pueden configurar por parámetros.
+El parámetro `CredentialSourceAppName` copia la conexión PostgreSQL de la configuración existente a un secreto de Container Apps, sin imprimir su valor. También puede publicarse el backend con `publish-container.ps1 -DatabaseUrl (Read-Host -AsSecureString)` cuando se proporciona una conexión propia. Los archivos temporales con parámetros se eliminan al terminar.
 
-La contraseña inicial de PostgreSQL se genera automáticamente. Se pasa como
-parámetro seguro de Bicep mediante un archivo temporal que se elimina al finalizar;
-la conexión se guarda en la configuración de App Service. Las salidas de la
-plantilla contienen nombres y URLs, sin contraseñas. La plantilla configura
-`HOST=0.0.0.0`, `DATABASE_URL`, `DB_SSL=require` y compilación remota con Oryx.
+El proceso completo:
 
-Después se publica el ZIP y se ejecuta `scripts/smoke-remote.js`: comprueba HTTPS,
-conexión PostgreSQL, catálogo, grabación/consulta de favoritos y valoraciones.
-Crea un perfil de prueba único y lo elimina con sus datos al terminar. Si se incluye `web/`, también ejecuta `scripts/smoke-web.js` para comprobar la web, sus rutas, sus archivos y los errores 404.
+1. Construye la imagen a partir de `Backend/Dockerfile`.
+2. Crea o actualiza `container-foundation.bicep`: registro Standard, identidad de lectura de imágenes, entorno `WorkloadProfiles` con consumo y frontend F1 independiente. Reutiliza el plan existente.
+3. Sube la imagen al registro privado con la identidad del operador de Azure.
+4. Publica `container-api.bicep` con el secreto PostgreSQL, CORS, puerto 8080, sondas de salud y límites de 0 a 1 réplica.
+5. `sync-postgres-firewall.ps1` ejecuta `src/egress.js` en la revisión nueva y permite su IP pública real en la regla `container-app-egress` de PostgreSQL. No usa la IP de entrada como si fuera de salida ni abre el firewall a todos los orígenes. Si la consola de Azure no responde en un entorno local, consultar la IP desde esa consola y pasarla mediante `-EgressIp`.
+6. Comprueba la API y PostgreSQL con `smoke-remote.js`.
+7. `publish-frontend.ps1` obtiene la URL real del contenedor, configura `VITE_API_BASE_URL`, compila React y publica `dist/` más `server.mjs` en el App Service del frontend.
+8. `smoke-web.js` comprueba servicios independientes, rutas, recursos, `/health` y CORS.
 
-La base se inicializa con los modelos de Sequelize y el catálogo original. Los
-datos personales guardados en el SQLite local requieren una migración adicional
-si se desea conservarlos en Azure.
+La creación de infraestructura puede tardar. Revisar el estado y esperar a que el entorno termine antes de sincronizar las IP. La selección de regiones de esta cuenta es Brazil South para web/registro/BD y West US para el contenedor, por las restricciones y cuotas de la suscripción.
 
-## Actualizar el código
+## Actualizar manualmente
 
 ```powershell
-.\deploy\azure.ps1 -SubscriptionId '<id-de-la-suscripcion>' -UpdateOnly
+.\deploy\azure.ps1 -SubscriptionId '<id-suscripcion-activa>' -ImageTag 'version-nueva' -UpdateOnly
 ```
 
-Publica el código y repite las comprobaciones sin cambiar infraestructura ni
-credenciales. Deben conservarse el mismo grupo y prefijo usados al crear recursos.
-Si una creación anterior falla parcialmente, revisar esos recursos antes de
-repetirla; `-UpdateOnly` presupone que la infraestructura ya quedó completa.
+`-UpdateOnly` conserva la infraestructura. La conexión se recupera del secreto existente de Container Apps; no necesita la aplicación anterior. El tag debe identificar la versión nueva de la imagen.
 
-Las URLs finales se obtienen desde Azure; no se presupone ningún dominio antes
-de completar la creación. El cliente de prueba está en `/laboratorio.html`.
-
-## Verificar la persistencia
-
-Guardar un favorito y una valoración en el laboratorio, reiniciar App Service,
-recargar y volver a consultarlos. PostgreSQL se ejecuta como recurso independiente
-de App Service y conserva los datos al reiniciar o republicar el backend.
-
-Para inspeccionar el servicio:
+Para publicar solo la web:
 
 ```powershell
-az webapp show --resource-group rg-eventos-fisi --name '<app-name>' --query defaultHostName
-az webapp log tail --resource-group rg-eventos-fisi --name '<app-name>'
+.\deploy\publish-frontend.ps1 -SubscriptionId '<id-suscripcion-activa>'
 ```
 
-`/api/health` verifica la disponibilidad de HTTP sin hacer una consulta SQL;
-`/api/ready` verifica también la conexión a PostgreSQL. Esto conserva la posibilidad
-de demostrar que HTTP responde mientras una consulta ORM sigue ejecutándose.
+## Publicación automática al cambiar `master`
 
-## Estado de validación
+El workflow [deploy-azure.yml](../../.github/workflows/deploy-azure.yml) detecta cambios en `Frontend/` y `Backend/`. Ejecuta sus pruebas antes de publicar. La construcción del frontend siempre utiliza el dominio real de la API. El backend se publica con una imagen cuyo tag es el SHA del commit; si falla su comprobación PostgreSQL posterior, se solicita restaurar la imagen anterior.
 
-La publicación del 30 de octubre de 2026 se completó en Brazil South. La plantilla y las 25 reglas del firewall terminaron con `Succeeded`; Oryx compiló el paquete y App Service confirmó el arranque. Pasaron las 15 pruebas locales y las comprobaciones públicas de la web, la API, la conexión PostgreSQL y escritura/consulta de favoritos y valoraciones. Los perfiles temporales de comprobación se eliminaron al terminar.
+El workflow usa OIDC mediante `github-oidc.bicep`: identidad federada vinculada exclusivamente a `mrcastilla8/taller-web-deploy` y `refs/heads/master`. Sus permisos son lectura del grupo, publicación en el frontend, modificación de este Container App, subida de imágenes al registro y uso de su identidad de lectura. El propietario también autorizó la actualización de la regla concreta `container-app-egress` para la IP real del contenedor. Ese permiso está limitado a ese recurso hijo; no da acceso a los datos, las contraseñas de PostgreSQL ni a la asignación de roles.
 
-Ver [el resumen de evidencia](../evidence/azure-deploy.json) y [la documentación completa](../../docs/AZURE.md). La vigencia individual del beneficio gratuito y el saldo de crédito no se verificaron desde facturación.
+La configuración de GitHub usa variables del repositorio `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` y `AZURE_SUBSCRIPTION_ID`; son identificadores, no contraseñas. El secreto PostgreSQL permanece en Azure. Consultar el resultado en la pestaña **Actions**. También se puede ejecutar manualmente con **Run workflow**.
 
-Fuentes oficiales:
+Para preparar la federación en otra cuenta, desplegar `github-oidc.bicep` con un operador autorizado a asignar roles y configurar las tres variables con las salidas de la plantilla. Las nuevas suscripciones necesitan sus propios recursos, cuotas y nombres; cambiar los valores por defecto coherentemente.
 
-- [Beneficios de Azure for Students](https://azure.microsoft.com/en-us/free/students/).
-- [Configuración de Node.js en App Service](https://learn.microsoft.com/en-us/azure/app-service/configure-language-nodejs).
-- [Limitaciones de bases locales sobre montajes de App Service](https://learn.microsoft.com/en-us/azure/app-service/configure-connect-to-azure-storage).
-- [API de PostgreSQL Flexible Server](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers).
+Las modificaciones de infraestructura Bicep se revisan y aplican con el script manual. El workflow de cambios de código no altera automáticamente tamaños, identidades ni secretos de BD; solo mantiene la regla de salida concreta autorizada. Una rama distinta de `master` tampoco publica.
+
+## Verificar
+
+Desde `Backend/`, con las URLs reales:
+
+```powershell
+npm test
+node scripts/smoke-remote.js '<url-backend>'
+node scripts/smoke-web.js '<url-frontend>' '<url-backend>'
+```
+
+Desde `Frontend/`, después de instalar también las dependencias de `Backend/`:
+
+```powershell
+npm test
+npm run build
+```
+
+## Archivos históricos
+
+`main.bicep` y `firewall.bicep` registran la primera infraestructura de PostgreSQL y App Service del 30 de octubre; no son las plantillas usadas para publicar el backend Docker actual. `azure.ps1` ahora utiliza `container-foundation.bicep` y `container-api.bicep`. `Backend/web/` ya no es servido ni copiado al contenedor.

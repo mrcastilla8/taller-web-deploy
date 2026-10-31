@@ -2,6 +2,7 @@
   "name": "eventos-fisi-backend",
   "version": "1.0.0",
   "private": true,
+  "allowScripts": { "sqlite3": true },
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

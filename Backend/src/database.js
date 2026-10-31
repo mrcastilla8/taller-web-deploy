@@ -12,7 +12,7 @@ export async function openDatabase({ storage, databaseUrl, ssl = true, seed = mo
   const sequelize = postgres
     ? new Sequelize(databaseUrl, {
       ...common, dialect: 'postgres', dialectModule: pg,
-      dialectOptions: { ssl: ssl ? { require: true, rejectUnauthorized: true } : false },
+      dialectOptions: { connectionTimeoutMillis: 10000, ssl: ssl ? { require: true, rejectUnauthorized: true } : false },
       pool: { min: 0, max: 5, acquire: 30000, idle: 10000 },
     })
     : new Sequelize({

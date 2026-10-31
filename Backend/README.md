@@ -5,12 +5,12 @@ PostgreSQL para Azure. Implementa los
 requisitos de las dos imágenes: APIs de eventos, concurrencia, modo en memoria,
 persistencia con ORM y dos funciones nuevas que graban y consultan datos.
 
-`Frontend/` conserva su lógica original. Su compilación puede servirse desde
-`Backend/web/`, junto a la API y el laboratorio. El laboratorio es un cliente
-de prueba de la API; la conexión de la web React a las APIs sigue pendiente.
+`Frontend/` consume esta API desde un servicio independiente en Azure.
+El backend se publica con Docker y ya no sirve `Backend/web/`. El laboratorio
+sigue disponible como cliente de prueba de favoritos, valoraciones y concurrencia.
 
-El despliegue fue completado y verificado en Azure el 30 de octubre de 2026:
-App Service Linux F1 y Azure Database for PostgreSQL. Consultar las
+La arquitectura se corrigió el 31 de octubre de 2026:
+frontend F1 independiente, backend Docker en Container Apps y PostgreSQL. Consultar las
 [URLs, recursos y resultados](../docs/AZURE.md) y la
 [guía para crear o actualizar el despliegue](deploy/README.md).
 
@@ -25,6 +25,7 @@ npm start
 ```
 
 - API: <http://localhost:3001/api/health>.
+- Salud del microservicio: <http://localhost:3001/health>.
 - Cliente de prueba: <http://localhost:3001/laboratorio.html>.
 - Base persistente: `Backend/data/eventos.sqlite`, creada automáticamente.
 - No se necesita instalar un servidor de base de datos ni configurar credenciales.

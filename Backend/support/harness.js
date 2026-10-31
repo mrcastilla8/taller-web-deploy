@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { openDatabase } from '../src/database.js'
 import { createApp } from '../src/app.js'
 
-export async function startServer({ storage = ':memory:', seed, log = () => {} } = {}) {
+export async function startServer({ storage = ':memory:', seed, log = () => {}, appOptions = {} } = {}) {
   const db = await openDatabase({ storage, seed })
-  const server = createApp(db, { log }).listen(0, '127.0.0.1')
+  const server = createApp(db, { log, ...appOptions }).listen(0, '127.0.0.1')
   try { await once(server, 'listening') } catch (error) { await db.close(); throw error }
   return {
     db, baseUrl: `http://127.0.0.1:${server.address().port}`,

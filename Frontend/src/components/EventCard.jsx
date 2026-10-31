@@ -4,11 +4,11 @@ import { formatDate, formatTime, getDayName, isPastEvent } from '../utils/dateUt
 
 // Tarjeta de evento para la grilla principal y lista de Mis Eventos
 function EventCard({ event, showCancelBtn = false }) {
-  const { isInscribed, inscribe, cancelInscription } = useApp()
+  const { busy, isInscribed, inscribe, cancelInscription } = useApp()
 
   const past        = isPastEvent(event.date)
   const inscribed   = isInscribed(event.id)
-  const totalEnrolled = event.enrolled + (inscribed ? 1 : 0)
+  const totalEnrolled = event.enrolled
   const isFull      = totalEnrolled >= event.capacity
   const spotsLeft   = event.capacity - totalEnrolled
 
@@ -91,7 +91,7 @@ function EventCard({ event, showCancelBtn = false }) {
 
           {/* Botón cancelar (vista Mis Eventos) */}
           {showCancelBtn && !past && inscribed && (
-            <button onClick={handleCancel} className="btn btn--danger btn--sm">
+            <button onClick={handleCancel} disabled={busy} className="btn btn--danger btn--sm">
               Cancelar
             </button>
           )}
@@ -100,7 +100,7 @@ function EventCard({ event, showCancelBtn = false }) {
           {!showCancelBtn && !past && !inscribed && (
             <button
               onClick={handleInscribe}
-              disabled={isFull}
+              disabled={isFull || busy}
               className="btn btn--primary btn--sm"
             >
               {isFull ? 'Cupo lleno' : 'Inscribirme'}

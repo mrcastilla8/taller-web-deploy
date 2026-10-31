@@ -1,14 +1,13 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { mockEvents } from '../data/mockData'
 import { formatDate, formatTime, getDayName, isPastEvent } from '../utils/dateUtils'
 
 function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isInscribed, inscribe, cancelInscription } = useApp()
+  const { events, busy, isInscribed, inscribe, cancelInscription } = useApp()
 
-  const event = mockEvents.find((e) => e.id === Number(id))
+  const event = events.find((e) => e.id === Number(id))
 
   // Evento no encontrado
   if (!event) {
@@ -26,7 +25,7 @@ function EventDetail() {
 
   const past        = isPastEvent(event.date)
   const inscribed   = isInscribed(event.id)
-  const totalEnrolled = event.enrolled + (inscribed ? 1 : 0)
+  const totalEnrolled = event.enrolled
   const isFull      = totalEnrolled >= event.capacity
   const spotsLeft   = event.capacity - totalEnrolled
   const fillPercent = Math.min((totalEnrolled / event.capacity) * 100, 100)
@@ -184,14 +183,14 @@ function EventDetail() {
                       <span className="inscription-confirm__icon">✅</span>
                       <p>¡Estás inscrito en este evento!</p>
                     </div>
-                    <button onClick={handleCancel} className="btn btn--danger btn--block">
+                    <button onClick={handleCancel} disabled={busy} className="btn btn--danger btn--block">
                       Cancelar inscripción
                     </button>
                   </>
                 ) : (
                   <button
                     onClick={handleInscribe}
-                    disabled={isFull}
+                    disabled={isFull || busy}
                     className="btn btn--primary btn--block"
                   >
                     {isFull ? 'Sin cupos disponibles' : 'Inscribirme en este evento'}

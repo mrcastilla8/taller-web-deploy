@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 
 function StudentModal() {
-  const { student, modalOpen, pendingEventId, closeModal, confirmRegistration } = useApp()
+  const { student, busy, error, modalOpen, pendingEventId, closeModal, confirmRegistration } = useApp()
 
   const isEditing = !!student && pendingEventId === null
 
@@ -94,6 +94,7 @@ function StudentModal() {
             onClick={closeModal}
             className="modal__close"
             aria-label="Cerrar"
+              disabled={busy}
           >
             ✕
           </button>
@@ -162,25 +163,28 @@ function StudentModal() {
 
           {/* Aviso de privacidad */}
           <p className="modal__privacy">
-            🔒 Tus datos se guardan solo en este dispositivo y se usan únicamente
-            para gestionar tus inscripciones.
+            🔒 Tu perfil e inscripciones se guardan en el servidor de EventosFISI.
+            Este navegador conserva un identificador para recuperar tus datos.
           </p>
+          {error && <p className="field-error" role="alert">{error}</p>}
 
           {/* Acciones */}
           <div className="modal__footer">
             <button
               type="button"
               onClick={closeModal}
+              disabled={busy}
               className="btn btn--ghost"
             >
               Cancelar
             </button>
-            <button type="submit" className="btn btn--primary">
+            <button type="submit" disabled={busy} className="btn btn--primary">
+              {busy ? 'Guardando…' : <>
               {isEditing
                 ? 'Guardar cambios'
                 : pendingEventId
                   ? 'Guardar e inscribirme'
-                  : 'Guardar datos'}
+                  : 'Guardar datos'}</>}
             </button>
           </div>
 

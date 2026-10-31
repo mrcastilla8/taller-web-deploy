@@ -1,165 +1,123 @@
-# Azure: configuración y despliegue de EventosFISI
+# Azure: frontend independiente y microservicio Docker
 
-Este documento registra el despliegue realizado y verificado el **30 de octubre de 2026**, hora de Lima. Los recursos pueden detenerse o retirarse posteriormente; las comprobaciones describen esa publicación.
+Corrección del despliegue del **31 de octubre de 2026**, America/Lima. El [documento del 30 de octubre](AZURE-2026-10-30.md) describe la versión conjunta anterior y se conserva como historial.
 
-## URLs públicas
+## Requisitos del laboratorio
 
-| Uso | URL |
+| Requisito | Implementación |
 |---|---|
-| Web React | https://eventosfisi-api-e4262df5.azurewebsites.net/ |
-| Detalle de un evento | https://eventosfisi-api-e4262df5.azurewebsites.net/eventos/1 |
-| API: eventos | https://eventosfisi-api-e4262df5.azurewebsites.net/api/events |
-| API: disponibilidad HTTP | https://eventosfisi-api-e4262df5.azurewebsites.net/api/health |
-| API: disponibilidad de PostgreSQL | https://eventosfisi-api-e4262df5.azurewebsites.net/api/ready |
-| Laboratorio | https://eventosfisi-api-e4262df5.azurewebsites.net/laboratorio.html |
+| Usar Azure, AWS o GCP | Los servicios de ejecución, imágenes y datos están en Azure |
+| Desplegar FrontendEventos | React/Vite en un App Service F1 propio, con su dominio y paquete |
+| Dockerfile para Eventos | `Backend/Dockerfile` y `.dockerignore`; imagen Linux de Node.js 24 |
+| Servicio `/health` | Ruta pública del microservicio y `HEALTHCHECK` de Docker |
+| Backend como microservicio | Azure Container Apps, perfil Consumption, 0 a 1 réplica |
+| Conectar frontend y backend en nube | `VITE_API_BASE_URL`, cliente HTTP, CORS y persistencia en PostgreSQL |
+
+La participación de dos personas es una condición de la actividad académica; este documento registra únicamente la implementación técnica.
 
 ## Arquitectura
 
-El navegador accede por HTTPS a un único App Service. Express sirve tres partes:
+El navegador descarga React desde el App Service del frontend. React realiza peticiones HTTPS a otro dominio, el del Container App del backend. El backend utiliza Sequelize y `pg` para consultar PostgreSQL con TLS. Las imágenes se almacenan en un registro privado de Azure y Container Apps las descarga mediante una identidad con permiso `AcrPull`.
 
-| Ruta | Contenido y origen de los datos |
+| Parte | Recurso y configuración |
 |---|---|
-| `/`, `/eventos/:id`, `/mis-eventos` | React compilado en `Backend/web/`; catálogo local, perfil e inscripciones en `localStorage` |
-| `/api/*` | API Express; Sequelize accede a PostgreSQL mediante el controlador `pg` |
-| `/laboratorio.html` y sus recursos | Cliente de prueba que llama a la API; perfiles, favoritos y valoraciones se guardan en PostgreSQL |
+| Frontend | `eventosfisi-web-e4262df5`, App Service Linux Node.js 24, plan F1 existente, Brazil South |
+| Servidor del frontend | `Frontend/server.mjs`, solo archivos estáticos compilados y soporte para rutas React |
+| Backend | `eventosfisi-docker-e4262df5`, imagen `eventos-backend` de Azure Container Registry |
+| Entorno del backend | `eventosfisi-env-docker-e4262df5`, WorkloadProfiles con Consumption, West US |
+| Recursos del contenedor | 0,25 vCPU, 0,5 GiB; mínimo 0 y máximo 1 réplica; puerto 8080 |
+| Registro | `eventosfisiacre4262df5`, Standard, Brazil South, usuario administrador desactivado |
+| Identidad de lectura de imagen | `eventosfisi-acr-pull-e4262df5`, solo lectura del registro |
+| PostgreSQL | `eventosfisi-pg-e4262df5`, PostgreSQL 16, Standard_B1ms, base `eventos`, Brazil South |
+| Almacenamiento y copias | 32 GB sin crecimiento automático; retención 7 días sin redundancia geográfica |
+| Grupo | `rg-eventos-fisi`; sus metadatos permanecen en North Central US |
 
-Las rutas React devuelven `index.html` para que un enlace directo o una recarga funcionen. Las rutas desconocidas de API y los archivos estáticos inexistentes conservan la respuesta 404. Cuando no existe una compilación en `Backend/web/`, la raíz del backend redirige al laboratorio, como en la ejecución local original.
+El frontend tiene su propio proceso y publicación. El backend no copia ni sirve `Frontend/dist` o `Backend/web`. `/api/events` en el frontend no es una API: la web debe llamar al dominio del microservicio.
 
-Publicar ambas partes en el mismo dominio no conecta automáticamente el frontend con la API: esa integración sigue pendiente.
+## Selección de servicios y regiones
 
-## Recursos utilizados
+Para una SPA estática, Azure Static Web Apps Free sería una opción apropiada. En esta suscripción, las cinco regiones ofrecidas para Static Web Apps no coinciden con las permitidas por su política. Se usa un App Service F1 independiente sobre el plan gratuito existente para conservar las rutas de React y evitar un cambio a pago por uso.
 
-| Recurso | Configuración desplegada |
+El backend usa Container Apps para ejecutar directamente la imagen Docker, exponer HTTPS y escalar a cero. Se seleccionó WorkloadProfiles con Consumption para disponer de una IP pública del entorno que se pueda autorizar en PostgreSQL. La suscripción permite un único entorno por región; se eligió West US para el entorno definitivo. No se añadió un NAT Gateway ni un workspace de Log Analytics.
+
+## URLs y estado de validación
+
+- Frontend: https://eventosfisi-web-e4262df5.azurewebsites.net/
+- Backend Docker: https://eventosfisi-docker-e4262df5.kindwater-fcfdd589.westus.azurecontainerapps.io
+- La URL real de backend y su imagen publicada se registran en [`Backend/evidence/azure-deploy.json`](../Backend/evidence/azure-deploy.json).
+- Salud HTTP: `<url-backend>/health`; compatibilidad: `<url-backend>/api/health`.
+- Conexión PostgreSQL: `<url-backend>/api/ready`.
+- Catálogo: `<url-backend>/api/events`.
+- Laboratorio de pruebas: `<url-backend>/laboratorio.html`.
+
+El resumen de evidencia distingue los resultados comprobados de las comprobaciones no realizadas. Las URLs pueden dejar de responder si se retiran los recursos posteriormente.
+
+## Integración React y API
+
+`Frontend/src/api/client.js` toma `VITE_API_BASE_URL` durante la compilación y envía `X-Session-Id` en las peticiones. `AppContext` carga `/api/state` y `/api/categories`, guarda el perfil mediante `PUT /api/student` y gestiona inscripciones con `POST /api/inscriptions` y `DELETE /api/inscriptions/:id`.
+
+El navegador conserva solo `edu_session_id`. El perfil y las inscripciones se recuperan del servidor al recargar. La web no utiliza `mockEvents` como origen del catálogo ni cuenta dos veces las inscripciones: el backend devuelve el total global.
+
+La interfaz presenta los errores y la espera de conexión, y desactiva las acciones mientras guarda. La eliminación del perfil también elimina sus datos asociados en el servidor. El identificador de sesión sigue siendo un mecanismo de demostración, no un sistema completo de autenticación con cuentas y contraseñas.
+
+CORS permite únicamente el origen configurado en `CORS_ORIGINS`; admite el preflight de `PUT`, `POST` y `DELETE` con JSON y `X-Session-Id`. Los orígenes no configurados reciben 403. En desarrollo se permiten `localhost:5173` y `127.0.0.1:5173`.
+
+La IP de entrada del entorno no coincidía con su salida real. Se comprobó la salida desde dentro del contenedor mediante HTTPS a `api.ipify.org`. La regla `container-app-egress` admite esa IP concreta. La herramienta `src/egress.js` se ejecuta mediante la consola autenticada de Azure y rechaza direcciones globales de apertura como `0.0.0.0`; no hay una ruta pública de diagnóstico.
+
+Los nueve eventos originales ya están pasados. Se conservan las reglas de inscripción y cancelación por fecha; las pruebas locales utilizan un evento futuro aislado para demostrar ambos flujos. El laboratorio del backend conserva favoritos, valoraciones y las pruebas de concurrencia.
+
+## Docker y salud
+
+El Dockerfile se adaptó de la referencia adjunta: se retiró la copia de `web/` y `support/`, se usó Node.js 24 con Debian Trixie para compatibilidad del binario nativo de SQLite y se fijó una política de instalación de scripts que permite únicamente `sqlite3`.
+
+Solo se instalan dependencias de producción, el contenedor usa el usuario `node` y el puerto 8080, y el proceso principal es `node src/server.js`. `.dockerignore` excluye dependencias, archivos de entorno, datos locales, pruebas, ZIP y frontend.
+
+`/health` comprueba que HTTP está disponible. El proceso escucha mientras inicializa PostgreSQL y reintenta la conexión si falla; durante ese arranque `/api/ready` devuelve 503 y no se registra la cadena de conexión. Cuando Sequelize está listo, se habilita la API completa. Container Apps tiene sondas Startup, Liveness y Readiness; Docker también incluye `HEALTHCHECK`.
+
+## Configuración y secretos
+
+| Variable | Dónde se usa |
 |---|---|
-| Tipo de suscripción | Azure for Students, activa al desplegar, con `spendingLimit=On` |
-| Grupo de recursos | `rg-eventos-fisi` |
-| Región de metadatos del grupo | North Central US |
-| Región de App Service y PostgreSQL | Brazil South (`brazilsouth`) |
-| Plan App Service | `eventosfisi-api-e4262df5-plan`, Linux, **F1 / Free**, capacidad 1 |
-| Aplicación | `eventosfisi-api-e4262df5` |
-| Runtime | Node.js 24 LTS; inicio con `npm start` |
-| PostgreSQL Flexible Server | `eventosfisi-pg-e4262df5`, versión 16 |
-| Cómputo de PostgreSQL | Burstable `Standard_B1ms` |
-| Base de datos | `eventos` |
-| Almacenamiento de PostgreSQL | 32 GB, crecimiento automático desactivado |
-| Copias de seguridad | Retención de 7 días; redundancia geográfica desactivada |
-| Alta disponibilidad | Desactivada |
-| Conexión a la BD | TLS con validación del certificado |
-| Firewall de PostgreSQL | 25 reglas para las IP de salida actuales y posibles de App Service |
+| `VITE_API_BASE_URL` | Frontend, valor público incorporado al JavaScript durante el build |
+| `CORS_ORIGINS` | Backend, origen HTTPS concreto del frontend |
+| `HOST=0.0.0.0`, `PORT=8080` | Contenedor del backend |
+| `NODE_ENV=production` | Aplicaciones publicadas |
+| `DATABASE_URL` | Backend, referencia al secreto `database-url` de Container Apps |
+| `DB_SSL=require` | Backend, TLS con validación de certificado |
 
-La región del grupo describe sus metadatos; sus recursos pueden estar en otra región permitida. La suscripción usada permitía Chile Central, Brazil South, North Central US, West US y West Central US. La validación inicial de F1 en North Central US reportó cuota cero. Se validaron las otras regiones permitidas y se eligió Brazil South; el grupo existente se reutilizó.
+La conexión existente de PostgreSQL se reutiliza, sin cambiar la contraseña ni recrear la base. En la migración se transfiere de la configuración anterior a un secreto del contenedor mediante un archivo temporal que se elimina. No se incorpora a la imagen, al frontend ni al repositorio. Las actualizaciones siguientes recuperan el secreto existente en Azure.
 
-Los nombres se calculan con un sufijo derivado de la suscripción y `NamePrefix`. Otra suscripción puede producir nombres y URLs diferentes. El ID de suscripción, datos personales y credenciales no son necesarios en esta documentación pública; los comandos usan un marcador.
+## Publicación automática
 
-## Configuración de ejecución
+El workflow [deploy-azure.yml](../.github/workflows/deploy-azure.yml) se ejecuta con los cambios pertinentes enviados a `master` o con **Run workflow**:
 
-La plantilla [`main.bicep`](../Backend/deploy/main.bicep) establece:
+1. Instala dependencias, ejecuta las pruebas de API e integración React y compila el frontend.
+2. Si cambió el backend, construye y sube una imagen con el SHA del commit, inicia una nueva revisión, comprueba su IP real de salida y actualiza únicamente `container-app-egress`. Después comprueba PostgreSQL. Si esta comprobación falla, solicita restaurar la imagen anterior.
+3. Si cambió el frontend, compila con la URL real del backend, publica su ZIP independiente y comprueba rutas, archivos, `/health` y CORS.
 
-| Variable o propiedad | Valor o función |
-|---|---|
-| `NODE_ENV` | `production` |
-| `HOST` | `0.0.0.0` para escuchar las peticiones de App Service |
-| `DATABASE_URL` | Conexión PostgreSQL generada durante el despliegue; su valor es secreto |
-| `DB_SSL` | `require` |
-| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true`; habilita la instalación y compilación remotas |
-| `ENABLE_ORYX_BUILD` | `true` |
-| `linuxFxVersion` | `NODE\|24-lts` |
-| `httpsOnly` | `true` |
-| TLS mínimo | 1.2 para la aplicación y SCM |
-| `alwaysOn` | `false` |
-| FTPS | Desactivado |
+Un fallo en las pruebas previas impide publicar. Las publicaciones se serializan. Un cambio solo de frontend no reconstruye el contenedor; un cambio solo del backend no recompila la web porque el dominio de la API se mantiene. Los cambios de infraestructura se aplican mediante las plantillas y scripts manuales, no mediante una ampliación automática de cuotas o tamaños.
 
-`src/server.js` lee el puerto asignado mediante `PORT`. `DATABASE_URL` selecciona PostgreSQL; sin ella, el backend utiliza SQLite local. El modo `--memory` utiliza SQLite temporal para los ejercicios locales.
-
-La contraseña inicial de PostgreSQL se genera aleatoriamente y se entrega a Bicep como parámetro seguro mediante un archivo temporal. El archivo se elimina al terminar. La conexión queda en la configuración de App Service. El repositorio no contiene su valor, tokens de Azure ni perfiles de publicación.
-
-## Cómo se realizó la publicación
-
-1. Se comprobó la suscripción activa y sus políticas de regiones y cuota, conservando el límite de gasto estudiantil.
-2. Se instalaron las dependencias con `npm ci`. La web se compiló con `npm run build` en `Frontend/` y el contenido de `dist/` se copió a `Backend/web/`.
-3. Se adaptó Express para servir la web compilada y sus rutas sin alterar `/api/*` ni el laboratorio. Los archivos fuente de `Frontend/` conservaron su comportamiento original.
-4. Se compilaron las plantillas Bicep y se generó `Backend/deploy/out/backend.zip`, con `src/`, `public/`, `web/`, `package.json` y `package-lock.json`. Las dependencias locales, credenciales, bases SQLite y evidencia quedaron fuera del ZIP.
-5. Se registraron los proveedores `Microsoft.Web` y `Microsoft.DBforPostgreSQL`. Se validó y creó la infraestructura en Brazil South.
-6. Se adelantó la publicación del ZIP mientras Azure terminaba las reglas del firewall. Oryx instaló las dependencias para Linux; App Service confirmó la compilación y el arranque correctos. También se esperó la finalización de toda la infraestructura y sus 25 reglas.
-7. Se comprobaron la web y la API por HTTPS y se revisaron visualmente el catálogo y el detalle de un evento con URL directa.
-
-El comando de publicación del paquete, ejecutado desde `Backend/`, es:
-
-```powershell
-az webapp deploy --subscription '<id-suscripcion-activa>' --resource-group rg-eventos-fisi --name eventosfisi-api-e4262df5 --src-path deploy/out/backend.zip --type zip --output none
-```
-
-Para repetir el proceso completo o actualizar el código, seguir la [guía de despliegue](../Backend/deploy/README.md). `-UpdateOnly` publica código sin cambiar la infraestructura ni regenerar credenciales.
-
-## Qué se comprobó
-
-| Comprobación | Resultado observado |
-|---|---|
-| Compilación de producción de React/Vite | Correcta |
-| Pruebas locales de la API sobre SQLite | 15 pruebas aprobadas |
-| Plantilla principal y módulo de firewall | `Succeeded`; 25 reglas completas |
-| Publicación y arranque de App Service | Completados correctamente |
-| Portada, rutas React, JS/CSS, laboratorio y respuestas 404 por HTTPS | Correctos |
-| `/api/ready` | Conexión PostgreSQL confirmada |
-| Perfil temporal, favoritos y valoraciones por HTTP | Escritura y consulta correctas; datos de prueba eliminados al terminar |
-| Navegador | Catálogo y detalle de evento renderizados correctamente |
-
-El [resumen estructurado](../Backend/evidence/azure-deploy.json) registra los resultados. Para repetir las comprobaciones, desde `Backend/` con sus dependencias instaladas:
-
-```powershell
-npm test
-node scripts/smoke-remote.js https://eventosfisi-api-e4262df5.azurewebsites.net
-node scripts/smoke-web.js https://eventosfisi-api-e4262df5.azurewebsites.net
-```
-
-`smoke-remote.js` crea un perfil temporal único, guarda y consulta favoritos y valoraciones, y borra ese perfil con sus datos al terminar. `smoke-web.js` solo lee recursos HTTP. También puede comprobar la web local sin argumento, después de generar `Backend/web/`.
-
-Las pruebas de concurrencia y persistencia tras reabrir SQLite están documentadas en la [evidencia local](../Backend/evidence/README.md). En Azure se confirmó escritura y consulta sobre PostgreSQL; no se realizó una prueba específica de conservación de registros atravesando un reinicio de App Service. Las pruebas de concurrencia del laboratorio pueden ejecutarse en la página; sus tiempos dependen de la carga y la red.
-
-## Laboratorio para la presentación
-
-1. Guardar un perfil con datos de prueba.
-2. Guardar un evento como favorito y consultar la lista.
-3. Guardar una valoración y consultar su puntuación, comentario y promedio.
-4. Recargar en el mismo navegador para recuperar el perfil y los favoritos desde el servidor; seleccionar el evento y consultar de nuevo sus valoraciones.
-5. Ejecutar **Probar espera de 3 segundos** y revisar qué peticiones terminaron durante la espera. **Probar consulta ORM** hace una consulta SQL real mediante Sequelize y mide la disponibilidad del servidor durante ella.
-
-El laboratorio guarda un identificador de sesión en el navegador, que acompaña a sus llamadas HTTP. Los registros pertenecientes a esa sesión se guardan en PostgreSQL. Abrir otro navegador o borrar el identificador genera otra sesión; esto no equivale a un sistema de autenticación con cuentas y contraseñas.
-
-Al día de la publicación, los nueve eventos originales ya habían pasado. La interfaz muestra cero próximos y limita las nuevas inscripciones según esas fechas. Favoritos y valoraciones permiten demostrar la base de datos con el catálogo existente.
+GitHub se autentica en Azure con OIDC y una identidad propia vinculada al repositorio y a `master`. Solo recibe permisos sobre el frontend, este Container App, el registro y la identidad de lectura, además de lectura de metadatos del grupo. El propietario autorizó expresamente actualizar la única regla PostgreSQL `container-app-egress`; la asignación se limita a ese recurso hijo. No permite acceder a tablas, obtener credenciales de PostgreSQL ni asignar roles. Las variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` y `AZURE_SUBSCRIPTION_ID` son identificadores de la federación; no se guarda una contraseña de Azure en GitHub.
 
 ## Costos y límites
 
-- **App Service F1:** nivel gratuito con 1 GB de memoria y 60 minutos de CPU diarios. Son minutos de procesamiento; no significa que el sitio se elimine después de una hora. Puede entrar en reposo y tardar en responder al primer acceso.
-- **PostgreSQL:** la oferta estudiantil publica 750 horas mensuales de B1ms, 32 GB de almacenamiento y 32 GB de backup durante el período elegible de 12 meses para nuevos clientes. La configuración desplegada coincide con ese tamaño.
-- **Vigencia y saldo:** no se verificaron la vigencia individual del beneficio, el saldo ni el total facturado. Si el beneficio no aplica o se supera su cuota, PostgreSQL puede consumir crédito estudiantil. La publicación no garantiza gratuidad permanente.
-- **Suscripción:** se mantuvo `spendingLimit=On` y no se cambió a pago por uso.
+- App Service F1: nivel gratuito, con límites de CPU y almacenamiento y posibilidad de reposo.
+- Container Apps Consumption: cuota mensual publicada de 180.000 vCPU-segundos, 360.000 GiB-segundos y dos millones de peticiones. La configuración escala a cero y limita el máximo a una réplica. Fuera de la cuota puede consumir crédito.
+- Azure for Students publica durante el período elegible un registro Standard con 100 GB y PostgreSQL B1ms de 750 horas mensuales con 32 GB de datos y backup. La vigencia individual y el saldo restante no se han verificado; no se garantiza gratuidad permanente.
+- La suscripción conserva el límite de gasto habilitado y no se cambia a pago por uso.
+- La base está en otra región que el contenedor; puede haber latencia y consumo de transferencia entre regiones. No se presenta esta arquitectura de laboratorio como una garantía de costo cero a largo plazo.
 
-Consultar los beneficios y el consumo en la cuenta antes de dejar los recursos funcionando a largo plazo. Los presupuestos y alertas, si se configuran, sirven para notificar el consumo; no sustituyen el límite de gasto.
+## Operación
 
-## Operación y retirada
+Consultar la [guía de despliegue](../Backend/deploy/README.md) para los comandos de actualización y las pruebas. Las imágenes del registro permiten identificar qué commit se publicó. Los resultados de la automatización aparecen en [GitHub Actions](https://github.com/mrcastilla8/taller-web-deploy/actions).
 
-Consultar la infraestructura y obtener el dominio sin mostrar configuraciones secretas:
-
-```powershell
-az deployment group show --subscription '<id-suscripcion-activa>' --resource-group rg-eventos-fisi --name eventos-fisi --query properties.provisioningState --output tsv
-az webapp show --subscription '<id-suscripcion-activa>' --resource-group rg-eventos-fisi --name eventosfisi-api-e4262df5 --query defaultHostName --output tsv
-az postgres flexible-server show --subscription '<id-suscripcion-activa>' --resource-group rg-eventos-fisi --name eventosfisi-pg-e4262df5 --query state --output tsv
-```
-
-La publicación quedó disponible sin un borrado programado. Para retirar **todo este despliegue**, el siguiente comando elimina los recursos del grupo, **incluida la base de datos y sus registros**. Exportar primero los datos que se quieran conservar y comprobar el grupo seleccionado:
-
-```powershell
-az resource list --subscription '<id-suscripcion-activa>' --resource-group rg-eventos-fisi --output table
-az group delete --subscription '<id-suscripcion-activa>' --name rg-eventos-fisi
-```
-
-Detener únicamente la aplicación no elimina PostgreSQL ni su almacenamiento.
+Para retirar el laboratorio completo, primero exportar los datos que se quieran conservar. Eliminar `rg-eventos-fisi` también elimina PostgreSQL y sus registros. Detener solo el frontend no detiene la base de datos ni elimina el registro. No hay un borrado programado.
 
 ## Fuentes oficiales
 
-- [Precios y límites de App Service Linux](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/).
-- [Beneficios de Azure for Students](https://azure.microsoft.com/en-us/free/students/).
-- [Configuración de Node.js en App Service](https://learn.microsoft.com/en-us/azure/app-service/configure-language-nodejs).
-- [Publicación de un paquete ZIP](https://learn.microsoft.com/en-us/azure/app-service/deploy-zip).
-- [PostgreSQL Flexible Server en Bicep](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers).
+- [Azure for Students y sus beneficios](https://azure.microsoft.com/en-us/free/students/).
+- [Precios de Container Apps](https://azure.microsoft.com/en-us/pricing/details/container-apps/).
+- [Identidad administrada para descargar imágenes privadas](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).
+- [Red de Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/networking).
+- [App Service para Node.js](https://learn.microsoft.com/en-us/azure/app-service/configure-language-nodejs).
+- [Login de Azure para GitHub Actions](https://github.com/Azure/login).
