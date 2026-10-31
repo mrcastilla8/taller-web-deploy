@@ -1,6 +1,8 @@
 param location string = 'brazilsouth'
 param resourceSuffix string = 'e4262df5'
 param githubRepository string = 'mrcastilla8/taller-web-deploy'
+param githubOwnerId string = '143348512'
+param githubRepositoryId string = '1432363006'
 
 resource deploymentIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'eventosfisi-github-deploy-${resourceSuffix}'
@@ -12,7 +14,7 @@ resource federation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedI
   name: 'github-master'
   properties: {
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:${githubRepository}:ref:refs/heads/master'
+    subject: 'repo:${split(githubRepository, '/')[0]}@${githubOwnerId}/${split(githubRepository, '/')[1]}@${githubRepositoryId}:ref:refs/heads/master'
     audiences: ['api://AzureADTokenExchange']
   }
 }
